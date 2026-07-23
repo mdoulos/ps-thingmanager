@@ -80,14 +80,27 @@ each time, build a release version:
 dotnet publish src/SimpleNotes.csproj -c Release -r win-x64 --self-contained false -o publish
 ```
 
-Then open the `publish` folder and double‑click **SimpleNotes.exe**.
+Then open the `publish` folder and double‑click **SimpleNotes.exe**. It has its
+own app icon and launches like any normal Windows program — no terminal needed.
 
 > Want a version that runs on a PC without .NET installed? Use
 > `--self-contained true` instead. The output folder will be larger because it
 > bundles the runtime.
 
-You can also create a desktop shortcut: right‑click `SimpleNotes.exe` →
-**Send to → Desktop (create shortcut)**.
+### Make it launch from an icon
+
+Once you have `SimpleNotes.exe`, you can start it the same way as any other app:
+
+- **Desktop shortcut:** right‑click `SimpleNotes.exe` →
+  **Send to → Desktop (create shortcut)**. Double‑click the desktop icon to run.
+- **Pin to taskbar / Start:** launch the app, then right‑click its taskbar icon
+  → **Pin to taskbar** (or find it and choose **Pin to Start**).
+
+The window, taskbar, and shortcut all show the app's purple notes icon.
+
+> Keep the whole `publish` folder together and create the shortcut to the
+> `.exe` inside it — the shortcut points at that file, so don't move just the
+> `.exe` out on its own.
 
 ---
 
