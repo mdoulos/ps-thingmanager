@@ -43,6 +43,7 @@ public partial class MainWindow : Window
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); PersistCurrent(); };
 
         TagsList.ItemsSource = _currentTags;
+        VersionText.Text = "v" + Updater.CurrentVersion.ToString(3);
 
         LoadAllNotes();
 
@@ -372,6 +373,73 @@ public partial class MainWindow : Window
         finally
         {
             _syncing = false;
+        }
+    }
+
+    // ============================================================
+    // Updates
+    // ============================================================
+
+    private async void UpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        object? original = UpdateButton.Content;
+        UpdateButton.IsEnabled = false;
+        UpdateButton.Content = "Checking…";
+        try
+        {
+            UpdateInfo? info = await Updater.CheckAsync();
+
+            if (info == null)
+            {
+                MessageBox.Show(this,
+                    "Couldn't determine the latest version. Please try again later.",
+                    "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (!Updater.IsNewer(info.Version))
+            {
+                MessageBox.Show(this,
+                    $"You're up to date (v{Updater.CurrentVersion.ToString(3)}).",
+                    "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // A newer release exists but has no installer attached: send the
+            // user to the downloads page instead.
+            if (string.IsNullOrEmpty(info.DownloadUrl))
+            {
+                var open = MessageBox.Show(this,
+                    $"Version {info.Tag} is available, but no installer was found on the " +
+                    "release. Open the downloads page?",
+                    "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                if (open == MessageBoxResult.Yes)
+                    Updater.OpenReleasesPage();
+                return;
+            }
+
+            var choice = MessageBox.Show(this,
+                $"Version {info.Tag} is available (you have v{Updater.CurrentVersion.ToString(3)}).\n\n" +
+                "Download and install it now? The app will close to finish updating.",
+                "Update available", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+            if (choice != MessageBoxResult.OK)
+                return;
+
+            UpdateButton.Content = "Downloading…";
+            PersistCurrent();                       // save notes before we exit
+            string installer = await Updater.DownloadInstallerAsync(info.DownloadUrl);
+            Updater.RunInstallerAndExit(installer); // closes the app
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this,
+                "Update check failed:\n" + ex.Message,
+                "Check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            UpdateButton.IsEnabled = true;
+            UpdateButton.Content = original;
         }
     }
 

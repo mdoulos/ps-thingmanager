@@ -27,6 +27,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Header: "Notes" + sort + add -->
@@ -101,6 +102,24 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+
+                <!-- Footer: version + check for updates -->
+                <Border Grid.Row="3" BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,1,0,0" Padding="16,9">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.0.0"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="11.5" VerticalAlignment="Center"/>
+                        <Button x:Name="UpdateButton" Grid.Column="1"
+                                Style="{StaticResource LinkButton}"
+                                Content="Check for updates"
+                                Click="UpdateButton_Click"/>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
 

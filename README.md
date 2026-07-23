@@ -104,6 +104,99 @@ The window, taskbar, and shortcut all show the app's purple notes icon.
 
 ---
 
+## Installing it like a real program (one‑click installer)
+
+For a "download → double‑click → installed, with a Start‑menu entry and an
+uninstaller" experience, the project ships an **Inno Setup** installer script
+(`installer/SimpleNotes.iss`). It produces a single `SimpleNotesSetup.exe`.
+
+You have two ways to produce that installer — pick one:
+
+### Option A — let GitHub build it (recommended)
+
+The repository includes a GitHub Actions workflow
+(`.github/workflows/release.yml`) that builds everything on a Windows runner.
+See **"Publishing an update"** below — the short version is: push a tag like
+`v1.0.0` and, a few minutes later, a **Release** appears on GitHub with
+`SimpleNotesSetup.exe` attached. Download and run it. Done — no tools to install
+locally.
+
+### Option B — build the installer yourself
+
+1. Install **Inno Setup** (free): <https://jrsoftware.org/isdl.php>
+2. Publish a self‑contained build (bundles the .NET runtime so target PCs need
+   nothing installed):
+
+   ```powershell
+   dotnet publish src/SimpleNotes.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o publish
+   ```
+
+3. Compile the installer:
+
+   ```powershell
+   & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\SimpleNotes.iss
+   ```
+
+4. The finished installer is at `installer\Output\SimpleNotesSetup.exe`.
+
+Running `SimpleNotesSetup.exe` installs Simple Notes per‑user (no admin prompt),
+adds Start‑menu and optional desktop shortcuts, and registers an entry in
+**Settings → Apps** so it can be uninstalled like any other program.
+
+---
+
+## Updates: going from the repository to an installed update
+
+An app can't safely rebuild itself from source on someone's PC, so updates flow
+through **GitHub Releases**. The picture:
+
+```
+  edit code  ->  bump version  ->  push a tag (vX.Y.Z)  ->  GitHub Action builds
+  the installer and publishes a Release  ->  the app's "Check for updates" button
+  sees the new Release and installs it
+```
+
+### Publishing an update (you, the developer)
+
+1. Make your changes.
+2. Bump the version in **`src/SimpleNotes.csproj`** (`<Version>1.1.0</Version>`).
+3. Commit and push.
+4. Create and push a matching tag:
+
+   ```powershell
+   git tag v1.1.0
+   git push origin v1.1.0
+   ```
+
+5. The **Build and Release** GitHub Action compiles a self‑contained build,
+   builds `SimpleNotesSetup.exe`, and publishes a GitHub Release named `v1.1.0`
+   with the installer attached. (Watch it under the repo's **Actions** tab.)
+
+That's the whole "repository → update" path. Keep the tag and the csproj
+`<Version>` the same so the app reports the right number.
+
+### Updating from inside the app (your users)
+
+There's a **Check for updates** link at the bottom‑left of the window, next to
+the version number. Clicking it:
+
+1. asks GitHub for the latest Release,
+2. compares it to the running version,
+3. if newer, offers to download `SimpleNotesSetup.exe` and run it — the app
+   closes, the installer upgrades it in place, and it relaunches on the new
+   version.
+
+If you're already current, it just says so.
+
+> **Important:** the in‑app updater reads the repository's Releases
+> *anonymously*, so this works only if the repository is **public**. If you keep
+> `ps-thingmanager` private, GitHub won't let the app read or download the
+> release without a login, and the button will report that it couldn't check.
+> In that case, either make the repo public or distribute new
+> `SimpleNotesSetup.exe` builds another way (e.g. a shared folder).
+
+---
+
 ## Using the app
 
 - **New note:** click the round purple **+** button at the top‑left.
@@ -121,11 +214,17 @@ The window, taskbar, and shortcut all show the app's purple notes icon.
 
 ```
 src/
-  SimpleNotes.csproj    Project file (targets .NET 8, WPF enabled)
+  SimpleNotes.csproj    Project file (targets .NET 8, WPF, version, icon)
   App.xaml / .cs        App startup + the dark theme (colors, button styles)
   MainWindow.xaml / .cs The two‑pane window and all its behavior
   Note.cs               The data model for a single note
   NoteStore.cs          Loads/saves notes to notes.json in %AppData%
+  Updater.cs            "Check for updates" via the GitHub Releases API
+  app.ico               The application icon
+installer/
+  SimpleNotes.iss       Inno Setup script -> SimpleNotesSetup.exe
+.github/workflows/
+  release.yml           Builds the installer + publishes a Release on a tag
 ```
 
 ## Troubleshooting
