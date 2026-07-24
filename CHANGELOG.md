@@ -11,6 +11,8 @@ You can instead name the version yourself with a `## vX.Y.Z — YYYY-MM-DD`
 heading. Newest version first.
 
 ## Unreleased
+
+## v1.1.8 — 2026-07-24
 - Added Tag Groups: organise tags into named groups (Manage Groups) and manage
   tags themselves (Manage Tags) — rename, delete with double-confirm, and see how
   many notes use each tag.
