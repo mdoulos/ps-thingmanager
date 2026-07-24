@@ -102,26 +102,8 @@ public partial class MainWindow : Window
         _current = note;
 
         TitleBox.Text = note.Title;
-
-        if (!string.IsNullOrWhiteSpace(note.ContentXaml))
-        {
-            try
-            {
-                using var sr = new StringReader(note.ContentXaml);
-                using var xr = XmlReader.Create(sr);
-                Editor.Document = (FlowDocument)XamlReader.Load(xr);
-            }
-            catch
-            {
-                Editor.Document = new FlowDocument();
-            }
-        }
-        else
-        {
-            Editor.Document = new FlowDocument();
-        }
-
-        RewireChecklists();
+        Editor.Document = ParseDocument(note.ContentXaml);
+        NormalizeChecklists();
 
         _currentTags.Clear();
         foreach (var t in note.Tags)
@@ -353,51 +335,55 @@ public partial class MainWindow : Window
 
     // ============================================================
     // Checklist support
+    //
+    // Check items are represented purely as text: the paragraph is tagged
+    // "Check"/"CheckDone" and its first inline is a Run holding a box glyph
+    // (checkbox controls are NOT embedded, so the document always serializes
+    // as plain text and can never crash on reload).
     // ============================================================
 
-    private CheckBox NewCheckBox()
+    private const string CheckTag = "Check";
+    private const string CheckDoneTag = "CheckDone";
+    private const string BoxEmpty = "☐";   // checkbox glyph
+    private const string BoxDone = "☑";
+    private static readonly Color AccentColor = (Color)ColorConverter.ConvertFromString("#7C5CFF");
+
+    private static bool IsCheck(Paragraph p)
     {
-        var cb = new CheckBox
-        {
-            Focusable = false,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 6, 0),
-            Cursor = Cursors.Arrow
-        };
-        cb.Checked += CheckItem_Toggled;
-        cb.Unchecked += CheckItem_Toggled;
-        return cb;
+        var t = p.Tag as string;
+        return t == CheckTag || t == CheckDoneTag;
+    }
+
+    private static bool LooksLikeBox(string? t)
+    {
+        t = t?.TrimStart();
+        return t != null && (t.StartsWith(BoxEmpty) || t.StartsWith(BoxDone));
     }
 
     private void AddChecklist(Paragraph p)
     {
-        if (HasCheckbox(p))
+        if (IsCheck(p))
             return;
-        var container = new InlineUIContainer(NewCheckBox()) { BaselineAlignment = BaselineAlignment.Center };
+        p.Tag = CheckTag;
+        var glyph = new Run(BoxEmpty + "  ") { Foreground = new SolidColorBrush(AccentColor) };
         if (p.Inlines.FirstInline != null)
-            p.Inlines.InsertBefore(p.Inlines.FirstInline, container);
+            p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
         else
-            p.Inlines.Add(container);
+            p.Inlines.Add(glyph);
     }
-
-    private static bool HasCheckbox(Paragraph p)
-        => p.Inlines.OfType<InlineUIContainer>().Any(c => c.Child is CheckBox);
 
     private void RemoveChecklist(Paragraph p)
     {
-        var boxes = p.Inlines.OfType<InlineUIContainer>().Where(c => c.Child is CheckBox).ToList();
-        foreach (var c in boxes)
-            p.Inlines.Remove(c);
-        if (boxes.Count > 0)
+        if (!IsCheck(p))
+            return;
+        if (p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
+            p.Inlines.Remove(r);
+        foreach (var inl in p.Inlines.ToList())
         {
-            foreach (var inl in p.Inlines.ToList())
-            {
-                inl.TextDecorations = null;
-                inl.ClearValue(TextElement.ForegroundProperty);
-            }
-            if ((p.Tag as string) == "Check")
-                p.Tag = "Normal";
+            inl.TextDecorations = null;
+            inl.ClearValue(TextElement.ForegroundProperty);
         }
+        p.Tag = "Normal";
     }
 
     private void RemoveChecklistInSelection()
@@ -406,50 +392,35 @@ public partial class MainWindow : Window
             RemoveChecklist(p);
     }
 
-    // In an editable RichTextBox the embedded checkbox never sees the click
-    // (the editor consumes the mouse to move the caret), so intercept it here.
+    // Clicking the box glyph toggles the item (crosses out / restores the text).
     private void Editor_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is DependencyObject d)
+        var tp = Editor.GetPositionFromPoint(e.GetPosition(Editor), true);
+        if (tp?.Paragraph is Paragraph p && IsCheck(p) &&
+            p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text) &&
+            tp.CompareTo(r.ContentEnd) <= 0)
         {
-            var cb = FindAncestor<CheckBox>(d);
-            if (cb != null && IsChecklistCheckBox(cb))
-            {
-                cb.IsChecked = !(cb.IsChecked ?? false);
-                e.Handled = true;
-            }
+            ToggleCheckParagraph(p);
+            e.Handled = true;
         }
     }
 
-    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
+    private void ToggleCheckParagraph(Paragraph p)
     {
-        while (d != null)
-        {
-            if (d is T t)
-                return t;
-            d = VisualTreeHelper.GetParent(d);
-        }
-        return null;
-    }
+        bool done = (p.Tag as string) == CheckDoneTag;
+        bool ns = !done;
+        p.Tag = ns ? CheckDoneTag : CheckTag;
 
-    private bool IsChecklistCheckBox(CheckBox cb) =>
-        AllParagraphs().Any(p => p.Inlines.OfType<InlineUIContainer>().Any(c => c.Child == cb));
+        var glyph = p.Inlines.FirstInline as Run;
+        if (glyph != null)
+            glyph.Text = (ns ? BoxDone : BoxEmpty) + "  ";
 
-    private void CheckItem_Toggled(object sender, RoutedEventArgs e)
-    {
-        var cb = (CheckBox)sender;
-        var p = AllParagraphs().FirstOrDefault(pp =>
-            pp.Inlines.OfType<InlineUIContainer>().Any(c => c.Child == cb));
-        if (p == null)
-            return;
-
-        bool done = cb.IsChecked == true;
         foreach (var inl in p.Inlines.ToList())
         {
-            if (inl is InlineUIContainer)
+            if (inl == glyph)
                 continue;
-            inl.TextDecorations = done ? TextDecorations.Strikethrough : null;
-            if (done)
+            inl.TextDecorations = ns ? TextDecorations.Strikethrough : null;
+            if (ns)
                 inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
             else
                 inl.ClearValue(TextElement.ForegroundProperty);
@@ -457,30 +428,48 @@ public partial class MainWindow : Window
         ScheduleSave();
     }
 
-    private void RewireChecklists()
+    // Called after loading a document: migrates any old embedded checkboxes to
+    // glyphs and makes sure every check paragraph has a correct box glyph.
+    private void NormalizeChecklists()
     {
-        foreach (var p in AllParagraphs())
+        foreach (var p in AllParagraphs().ToList())
         {
-            foreach (var c in p.Inlines.OfType<InlineUIContainer>())
+            // Migrate legacy InlineUIContainer/CheckBox content to a glyph.
+            var containers = p.Inlines.OfType<InlineUIContainer>().ToList();
+            if (containers.Count > 0)
             {
-                if (c.Child is not CheckBox cb)
-                    continue;
-                cb.Focusable = false;
-                cb.Cursor = Cursors.Arrow;
-                cb.Checked -= CheckItem_Toggled;
-                cb.Unchecked -= CheckItem_Toggled;
-                cb.Checked += CheckItem_Toggled;
-                cb.Unchecked += CheckItem_Toggled;
+                bool wasChecked = containers[0].Child is CheckBox cb && cb.IsChecked == true;
+                foreach (var c in containers)
+                    p.Inlines.Remove(c);
+                p.Tag = wasChecked ? CheckDoneTag : CheckTag;
+            }
 
-                bool done = cb.IsChecked == true;
-                foreach (var inl in p.Inlines.ToList())
-                {
-                    if (inl is InlineUIContainer)
-                        continue;
-                    inl.TextDecorations = done ? TextDecorations.Strikethrough : null;
-                    if (done)
-                        inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
-                }
+            if (!IsCheck(p))
+                continue;
+
+            bool done = (p.Tag as string) == CheckDoneTag;
+            if (p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
+            {
+                r.Text = (done ? BoxDone : BoxEmpty) + "  ";
+                r.Foreground = new SolidColorBrush(AccentColor);
+            }
+            else
+            {
+                var glyph = new Run((done ? BoxDone : BoxEmpty) + "  ")
+                { Foreground = new SolidColorBrush(AccentColor) };
+                if (p.Inlines.FirstInline != null)
+                    p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
+                else
+                    p.Inlines.Add(glyph);
+            }
+
+            foreach (var inl in p.Inlines.ToList())
+            {
+                if (inl == p.Inlines.FirstInline)
+                    continue;
+                inl.TextDecorations = done ? TextDecorations.Strikethrough : null;
+                if (done)
+                    inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
             }
         }
     }
@@ -489,14 +478,20 @@ public partial class MainWindow : Window
     {
         foreach (var p in AllParagraphs())
         {
-            var cb = p.Inlines.OfType<InlineUIContainer>()
-                      .Select(c => c.Child as CheckBox).FirstOrDefault(x => x != null);
-            if (cb?.IsChecked == true)
-                foreach (var inl in p.Inlines.ToList())
-                    if (inl is not InlineUIContainer)
-                        inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
+            if ((p.Tag as string) != CheckDoneTag)
+                continue;
+            foreach (var inl in p.Inlines.ToList())
+                if (inl != p.Inlines.FirstInline)
+                    inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
         }
     }
+
+    // Strip any legacy embedded controls from serialized XAML before parsing,
+    // so an old note's checkbox can never be turned into a live control.
+    private static string StripUIContainers(string xaml)
+        => System.Text.RegularExpressions.Regex.Replace(
+            xaml, "<InlineUIContainer.*?</InlineUIContainer>", "",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
 
     // ============================================================
     // Font size +/- with per-category memory
@@ -733,6 +728,29 @@ public partial class MainWindow : Window
     // ============================================================
     // Document helpers
     // ============================================================
+
+    // Parse saved XAML, always stripping any legacy embedded controls first so
+    // they can never be created (that is what crashed old check-list notes).
+    private static FlowDocument ParseDocument(string? xaml)
+    {
+        if (string.IsNullOrWhiteSpace(xaml))
+            return new FlowDocument();
+        try
+        {
+            return LoadXaml(StripUIContainers(xaml));
+        }
+        catch
+        {
+            return new FlowDocument();
+        }
+    }
+
+    private static FlowDocument LoadXaml(string xaml)
+    {
+        using var sr = new StringReader(xaml);
+        using var xr = XmlReader.Create(sr);
+        return (FlowDocument)XamlReader.Load(xr);
+    }
 
     private IEnumerable<Paragraph> AllParagraphs() => Flatten(Editor.Document.Blocks);
 

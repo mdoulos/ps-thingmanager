@@ -8,7 +8,7 @@
 ; Because the AppId is stable, re-running a newer installer upgrades in place.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.1"
+  #define MyAppVersion "1.1.2"
 #endif
 
 #define MyAppName "Purple Star Notes"

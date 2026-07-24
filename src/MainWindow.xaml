@@ -101,7 +101,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.1"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.2"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
