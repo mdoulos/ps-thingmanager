@@ -406,6 +406,35 @@ public partial class MainWindow : Window
             RemoveChecklist(p);
     }
 
+    // In an editable RichTextBox the embedded checkbox never sees the click
+    // (the editor consumes the mouse to move the caret), so intercept it here.
+    private void Editor_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject d)
+        {
+            var cb = FindAncestor<CheckBox>(d);
+            if (cb != null && IsChecklistCheckBox(cb))
+            {
+                cb.IsChecked = !(cb.IsChecked ?? false);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
+    {
+        while (d != null)
+        {
+            if (d is T t)
+                return t;
+            d = VisualTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+
+    private bool IsChecklistCheckBox(CheckBox cb) =>
+        AllParagraphs().Any(p => p.Inlines.OfType<InlineUIContainer>().Any(c => c.Child == cb));
+
     private void CheckItem_Toggled(object sender, RoutedEventArgs e)
     {
         var cb = (CheckBox)sender;
@@ -522,8 +551,26 @@ public partial class MainWindow : Window
     // Text color
     // ============================================================
 
-    private void Color_Click(object sender, RoutedEventArgs e)
+    private void ColorButton_Click(object sender, RoutedEventArgs e) => ColorPopup.IsOpen = true;
+
+    private void ColorSwatch_Click(object sender, RoutedEventArgs e)
     {
+        ColorPopup.IsOpen = false;
+        if (_current == null || ((Button)sender).Tag is not string hex)
+            return;
+        try
+        {
+            var color = (Color)ColorConverter.ConvertFromString(hex);
+            Editor.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, new SolidColorBrush(color));
+            Editor.Focus();
+            ScheduleSave();
+        }
+        catch { /* ignore bad swatch value */ }
+    }
+
+    private void MoreColors_Click(object sender, RoutedEventArgs e)
+    {
+        ColorPopup.IsOpen = false;
         if (_current == null)
             return;
 
@@ -543,6 +590,7 @@ public partial class MainWindow : Window
 
     private void ClearColor_Click(object sender, RoutedEventArgs e)
     {
+        ColorPopup.IsOpen = false;
         if (_current == null)
             return;
         foreach (var inl in InlinesInSelection())

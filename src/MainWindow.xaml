@@ -75,30 +75,20 @@
                          SelectionChanged="NotesList_SelectionChanged">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:Note}">
-                            <Grid Margin="15,12,14,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="&#xE734;"
-                                           FontFamily="Segoe MDL2 Assets" FontSize="15"
-                                           Foreground="{DynamicResource AccentBrush}"
-                                           VerticalAlignment="Top" Margin="0,2,11,0"/>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{Binding DisplayTitle}"
-                                               Foreground="{DynamicResource TextPrimaryBrush}"
-                                               FontWeight="SemiBold" FontSize="14"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding Snippet}"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               FontSize="12.5" Margin="0,4,0,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding ModifiedDisplay}"
-                                               Foreground="{DynamicResource TextMutedBrush}"
-                                               FontSize="11" Margin="0,7,0,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                            </Grid>
+                            <StackPanel Margin="17,12,14,12">
+                                <TextBlock Text="{Binding DisplayTitle}"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           FontWeight="SemiBold" FontSize="14"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Snippet}"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           FontSize="12.5" Margin="0,4,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding ModifiedDisplay}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" Margin="0,7,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -111,7 +101,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.0"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.1"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -219,6 +209,36 @@
 
                         <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
 
+                        <!-- Alignment dropdown -->
+                        <Button x:Name="AlignButton" Style="{StaticResource ToolButton}"
+                                ToolTip="Text alignment" Click="AlignButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="AlignIcon" Text="&#xE8E4;"
+                                           FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Indent / outdent (vector icons) -->
+                        <Button x:Name="IndentBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Increase indent" Click="Indent_Click">
+                            <Viewbox Width="16" Height="16">
+                                <Path Data="M0,1 L16,1 L16,3 L0,3 Z M0,13 L16,13 L16,15 L0,15 Z M7,5 L16,5 L16,6.8 L7,6.8 Z M7,9.2 L16,9.2 L16,11 L7,11 Z M0,4.3 L5,8 L0,11.7 Z"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                            </Viewbox>
+                        </Button>
+                        <Button x:Name="OutdentBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Decrease indent" Click="Outdent_Click">
+                            <Viewbox Width="16" Height="16">
+                                <Path Data="M0,1 L16,1 L16,3 L0,3 Z M0,13 L16,13 L16,15 L0,15 Z M7,5 L16,5 L16,6.8 L7,6.8 Z M7,9.2 L16,9.2 L16,11 L7,11 Z M5,4.3 L0,8 L5,11.7 Z"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                            </Viewbox>
+                        </Button>
+
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+
                         <ToggleButton x:Name="BoldBtn" Style="{StaticResource FormatToggle}"
                                       ToolTip="Bold (Ctrl+B)" Click="Bold_Click">
                             <TextBlock Text="B" FontWeight="Bold"/>
@@ -250,36 +270,10 @@
 
                         <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
 
-                        <!-- Text color + clear -->
+                        <!-- Text color (opens a popup with swatches + reset) -->
                         <Button x:Name="ColorBtn" Style="{StaticResource ToolButton}"
-                                ToolTip="Text color" Click="Color_Click">
+                                ToolTip="Text color" Click="ColorButton_Click">
                             <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
-                        </Button>
-                        <Button x:Name="ClearColorBtn" Style="{StaticResource ToolButton}"
-                                ToolTip="Reset to default color" Click="ClearColor_Click">
-                            <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                        </Button>
-
-                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
-
-                        <!-- Alignment dropdown -->
-                        <Button x:Name="AlignButton" Style="{StaticResource ToolButton}"
-                                ToolTip="Text alignment" Click="AlignButton_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="AlignIcon" Text="&#xE8E4;"
-                                           FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
-                                           FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="OutdentBtn" Style="{StaticResource ToolButton}"
-                                ToolTip="Decrease indent" Click="Outdent_Click">
-                            <TextBlock Text="&#xE162;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                        </Button>
-                        <Button x:Name="IndentBtn" Style="{StaticResource ToolButton}"
-                                ToolTip="Increase indent" Click="Indent_Click">
-                            <TextBlock Text="&#xE161;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                         </Button>
                     </StackPanel>
                 </Border>
@@ -295,7 +289,8 @@
                              SpellCheck.IsEnabled="True"
                              VerticalScrollBarVisibility="Auto"
                              SelectionChanged="Editor_SelectionChanged"
-                             TextChanged="Editor_TextChanged">
+                             TextChanged="Editor_TextChanged"
+                             PreviewMouseLeftButtonDown="Editor_PreviewMouseLeftButtonDown">
                     <RichTextBox.Resources>
                         <Style TargetType="Paragraph">
                             <Setter Property="Margin" Value="0,0,0,10"/>
@@ -404,6 +399,50 @@
                             <TextBlock Width="26" Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets"
                                        FontSize="14" VerticalAlignment="Center"/>
                             <TextBlock Text="Justify" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Color popup ================= -->
+        <Popup x:Name="ColorPopup" PlacementTarget="{Binding ElementName=ColorBtn}"
+               Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade" VerticalOffset="4">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="8" Width="230">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <WrapPanel>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#20202A" Background="#20202A" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#6E6E7E" Background="#6E6E7E" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#FFFFFF" Background="#FFFFFF" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#E5484D" Background="#E5484D" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#F5A524" Background="#F5A524" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#F5D90A" Background="#F5D90A" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#46A758" Background="#46A758" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#12A594" Background="#12A594" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#0091FF" Background="#0091FF" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#7C5CFF" Background="#7C5CFF" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#8E4EC6" Background="#8E4EC6" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#EB57A0" Background="#EB57A0" Click="ColorSwatch_Click"/>
+                    </WrapPanel>
+                    <Border Height="1" Margin="2,7" Background="{DynamicResource BorderBrush}"/>
+                    <Button Style="{StaticResource MenuRowButton}" Click="MoreColors_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE790;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="More colors…" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Click="ClearColor_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE894;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Reset to default" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
