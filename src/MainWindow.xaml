@@ -75,7 +75,14 @@
                          SelectionChanged="NotesList_SelectionChanged">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:Note}">
-                            <StackPanel Margin="17,12,14,12">
+                            <StackPanel Margin="17,12,14,12" Background="Transparent">
+                                <StackPanel.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Add/Edit Tags" Click="CtxTags_Click"/>
+                                        <MenuItem Header="Add/Edit Snippet" Click="CtxSnippet_Click"/>
+                                        <MenuItem Header="Delete Note" Click="CtxDelete_Click"/>
+                                    </ContextMenu>
+                                </StackPanel.ContextMenu>
                                 <TextBlock Text="{Binding DisplayTitle}"
                                            Foreground="{DynamicResource TextPrimaryBrush}"
                                            FontWeight="SemiBold" FontSize="14"
@@ -101,7 +108,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.2"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.3"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -145,10 +152,14 @@
                              Tag="Untitled Note"
                              FontSize="24" FontWeight="Bold"
                              TextChanged="TitleBox_TextChanged"/>
-                    <Button x:Name="DeleteButton" Grid.Column="1"
-                            Style="{StaticResource IconButton}"
-                            Content="&#xE74D;" ToolTip="Delete note"
-                            Click="DeleteButton_Click"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="SnippetButton" Style="{StaticResource IconButton}"
+                                Content="&#xE70B;" ToolTip="Add/edit snippet"
+                                Click="SnippetButton_Click"/>
+                        <Button x:Name="DeleteButton" Style="{StaticResource IconButton}"
+                                Content="&#xE74D;" ToolTip="Delete note"
+                                Click="DeleteButton_Click"/>
+                    </StackPanel>
                 </Grid>
 
                 <!-- Tags row -->
@@ -184,7 +195,7 @@
                         </ItemsControl>
                         <TextBox x:Name="TagInput" Width="200" VerticalAlignment="Center"
                                  Style="{StaticResource PlaceholderTextBox}"
-                                 Tag="Link tags, notes, files..."
+                                 Tag="Link tags"
                                  FontSize="12.5"
                                  KeyDown="TagInput_KeyDown"/>
                     </StackPanel>
@@ -199,9 +210,7 @@
                         <Button x:Name="FormatButton" Style="{StaticResource ToolButton}"
                                 ToolTip="Paragraph format" Click="FormatButton_Click">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="FormatIcon" Text="&#xE8E4;"
-                                           FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                           VerticalAlignment="Center"/>
+                                <ContentControl x:Name="FormatIcon" VerticalAlignment="Center"/>
                                 <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
                                            FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
@@ -310,7 +319,7 @@
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
                 </Border.Effect>
-                <StackPanel>
+                <StackPanel x:Name="FormatMenuPanel">
                     <Button Style="{StaticResource MenuRowButton}" Tag="Normal" Click="Format_Selected">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Width="26" Text="&#xE8E4;" FontFamily="Segoe MDL2 Assets"
@@ -346,8 +355,8 @@
                     </Button>
                     <Button Style="{StaticResource MenuRowButton}" Tag="Numbered" Click="Format_Selected">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Width="26" Text="&#xF12B;" FontFamily="Segoe MDL2 Assets"
-                                       FontSize="14" VerticalAlignment="Center"/>
+                            <ContentControl x:Name="NumberedMenuIcon" Width="26" VerticalAlignment="Center"
+                                            HorizontalContentAlignment="Left"/>
                             <TextBlock Text="Numbered List" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
@@ -372,7 +381,7 @@
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
                 </Border.Effect>
-                <StackPanel>
+                <StackPanel x:Name="AlignMenuPanel">
                     <Button Style="{StaticResource MenuRowButton}" Tag="Left" Click="Align_Selected">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Width="26" Text="&#xE8E4;" FontFamily="Segoe MDL2 Assets"
@@ -416,20 +425,29 @@
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
                 </Border.Effect>
                 <StackPanel>
-                    <WrapPanel>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#20202A" Background="#20202A" Click="ColorSwatch_Click"/>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#6E6E7E" Background="#6E6E7E" Click="ColorSwatch_Click"/>
+                    <UniformGrid Columns="6">
+                        <!-- Row 1: greyscale, black -> white -->
+                        <Button Style="{StaticResource SwatchButton}" Tag="#000000" Background="#000000" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#333333" Background="#333333" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#666666" Background="#666666" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#999999" Background="#999999" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#CCCCCC" Background="#CCCCCC" Click="ColorSwatch_Click"/>
                         <Button Style="{StaticResource SwatchButton}" Tag="#FFFFFF" Background="#FFFFFF" Click="ColorSwatch_Click"/>
+                        <!-- Row 2: warm colors -->
                         <Button Style="{StaticResource SwatchButton}" Tag="#E5484D" Background="#E5484D" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#EC7B2B" Background="#EC7B2B" Click="ColorSwatch_Click"/>
                         <Button Style="{StaticResource SwatchButton}" Tag="#F5A524" Background="#F5A524" Click="ColorSwatch_Click"/>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#F5D90A" Background="#F5D90A" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#EFC000" Background="#EFC000" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#A0C93B" Background="#A0C93B" Click="ColorSwatch_Click"/>
                         <Button Style="{StaticResource SwatchButton}" Tag="#46A758" Background="#46A758" Click="ColorSwatch_Click"/>
+                        <!-- Row 3: cool colors -->
                         <Button Style="{StaticResource SwatchButton}" Tag="#12A594" Background="#12A594" Click="ColorSwatch_Click"/>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#0091FF" Background="#0091FF" Click="ColorSwatch_Click"/>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#7C5CFF" Background="#7C5CFF" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#0EA5C4" Background="#0EA5C4" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#2F7FE0" Background="#2F7FE0" Click="ColorSwatch_Click"/>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#4256D0" Background="#4256D0" Click="ColorSwatch_Click"/>
                         <Button Style="{StaticResource SwatchButton}" Tag="#8E4EC6" Background="#8E4EC6" Click="ColorSwatch_Click"/>
-                        <Button Style="{StaticResource SwatchButton}" Tag="#EB57A0" Background="#EB57A0" Click="ColorSwatch_Click"/>
-                    </WrapPanel>
+                        <Button Style="{StaticResource SwatchButton}" Tag="#D6489B" Background="#D6489B" Click="ColorSwatch_Click"/>
+                    </UniformGrid>
                     <Border Height="1" Margin="2,7" Background="{DynamicResource BorderBrush}"/>
                     <Button Style="{StaticResource MenuRowButton}" Click="MoreColors_Click">
                         <StackPanel Orientation="Horizontal">
@@ -445,6 +463,91 @@
                             <TextBlock Text="Reset to default" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Tags popup ================= -->
+        <Popup x:Name="TagsPopup" PlacementTarget="{Binding ElementName=EditorRoot}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="360">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="Tags" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <ItemsControl x:Name="TagsPopupList" MinHeight="26">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource FieldBrush}"
+                                        CornerRadius="6" Padding="8,3" Margin="0,0,6,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#x2756;" FontSize="10"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                        <TextBlock Text="{Binding}"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <Button Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
+                                                FontSize="9" Margin="6,0,0,0"
+                                                Foreground="{DynamicResource TextMutedBrush}"
+                                                Background="Transparent" BorderThickness="0"
+                                                Cursor="Hand" ToolTip="Remove tag"
+                                                Click="RemoveTag_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border Background="{DynamicResource FieldBrush}" CornerRadius="8"
+                            Padding="10,0" Margin="0,4,0,0" Height="36">
+                        <TextBox x:Name="TagsPopupInput" VerticalAlignment="Center"
+                                 Style="{StaticResource PlaceholderTextBox}"
+                                 Tag="Add a tag and press Enter"
+                                 KeyDown="TagsPopupInput_KeyDown"/>
+                    </Border>
+                    <Button Content="Done" HorizontalAlignment="Right" Margin="0,12,0,0"
+                            Style="{StaticResource LinkButton}" FontSize="13"
+                            Click="CloseTagsPopup_Click"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Snippet popup ================= -->
+        <Popup x:Name="SnippetPopup" PlacementTarget="{Binding ElementName=EditorRoot}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="380">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="Snippet" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="Shown in the note list instead of the note text."
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,3,0,10" TextWrapping="Wrap"/>
+                    <Border Background="{DynamicResource FieldBrush}" CornerRadius="8" Padding="10,8">
+                        <TextBox x:Name="SnippetInput"
+                                 Style="{StaticResource PlaceholderTextBox}"
+                                 Tag="Type a short snippet..."
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 Height="90" VerticalContentAlignment="Top"
+                                 VerticalScrollBarVisibility="Auto"/>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Content="Clear" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="SnippetClear_Click"/>
+                        <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
+                                Click="SnippetSave_Click"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Popup>

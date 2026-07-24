@@ -42,6 +42,8 @@ public partial class MainWindow : Window
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); PersistCurrent(); };
 
         TagsList.ItemsSource = _currentTags;
+        TagsPopupList.ItemsSource = _currentTags;
+        NumberedMenuIcon.Content = MakeNumberedIcon(14);
         VersionText.Text = "v" + Updater.CurrentVersion.ToString(3);
 
         LoadAllNotes();
@@ -170,18 +172,21 @@ public partial class MainWindow : Window
 
     private void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_current == null)
-            return;
+        if (_current != null)
+            DeleteNote(_current);
+    }
 
+    private void DeleteNote(Note note)
+    {
         var result = MessageBox.Show(this,
-            $"Delete \"{_current.DisplayTitle}\"?",
+            $"Delete \"{note.DisplayTitle}\"?",
             "Delete note", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (result != MessageBoxResult.OK)
             return;
 
-        var toRemove = _current;
-        _current = null;
-        _notes.Remove(toRemove);
+        if (note == _current)
+            _current = null;
+        _notes.Remove(note);
 
         if (_notes.Count == 0)
             _notes.Add(new Note { Title = "" });
@@ -189,6 +194,40 @@ public partial class MainWindow : Window
         NoteStore.Save(_notes);
         RefreshList();
         NotesList.SelectedItem = _notes.OrderByDescending(n => n.Modified).First();
+    }
+
+    // ---- Right-click context menu on note list items ----
+
+    private static Note? NoteFrom(object sender)
+    {
+        // Resolve the note from the context menu's placement target (the note row).
+        if (sender is MenuItem mi && mi.Parent is ContextMenu cm &&
+            cm.PlacementTarget is FrameworkElement target && target.DataContext is Note n)
+            return n;
+        return (sender as FrameworkElement)?.DataContext as Note;
+    }
+
+    private void CtxTags_Click(object sender, RoutedEventArgs e)
+    {
+        var note = NoteFrom(sender);
+        if (note == null) return;
+        NotesList.SelectedItem = note;   // load it so _currentTags is populated
+        OpenTagsPopup();
+    }
+
+    private void CtxSnippet_Click(object sender, RoutedEventArgs e)
+    {
+        var note = NoteFrom(sender);
+        if (note == null) return;
+        NotesList.SelectedItem = note;
+        OpenSnippetPopup();
+    }
+
+    private void CtxDelete_Click(object sender, RoutedEventArgs e)
+    {
+        var note = NoteFrom(sender);
+        if (note != null)
+            DeleteNote(note);
     }
 
     private void SortButton_Click(object sender, RoutedEventArgs e) => RefreshList();
@@ -207,14 +246,26 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Enter)
             return;
-
-        string tag = TagInput.Text.Trim().Trim('/');
+        AddTag(TagInput.Text);
         TagInput.Text = "";
+    }
 
+    private void TagsPopupInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+        AddTag(TagsPopupInput.Text);
+        TagsPopupInput.Text = "";
+    }
+
+    private void AddTag(string raw)
+    {
+        if (_current == null)
+            return;
+        string tag = raw.Trim().Trim('/');
         if (string.IsNullOrEmpty(tag) ||
             _currentTags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             return;
-
         _currentTags.Add(tag);
         ScheduleSave();
     }
@@ -225,6 +276,46 @@ public partial class MainWindow : Window
         {
             _currentTags.Remove(tag);
             ScheduleSave();
+        }
+    }
+
+    private void OpenTagsPopup()
+    {
+        if (_current == null) return;
+        TagsPopupInput.Text = "";
+        TagsPopup.IsOpen = true;
+    }
+
+    private void CloseTagsPopup_Click(object sender, RoutedEventArgs e) => TagsPopup.IsOpen = false;
+
+    // ---- Snippet ----
+
+    private void SnippetButton_Click(object sender, RoutedEventArgs e) => OpenSnippetPopup();
+
+    private void OpenSnippetPopup()
+    {
+        if (_current == null) return;
+        SnippetInput.Text = _current.CustomSnippet;
+        SnippetPopup.IsOpen = true;
+    }
+
+    private void SnippetSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current != null)
+        {
+            _current.CustomSnippet = SnippetInput.Text.Trim();
+            NoteStore.Save(_notes);
+        }
+        SnippetPopup.IsOpen = false;
+    }
+
+    private void SnippetClear_Click(object sender, RoutedEventArgs e)
+    {
+        SnippetInput.Text = "";
+        if (_current != null)
+        {
+            _current.CustomSnippet = "";
+            NoteStore.Save(_notes);
         }
     }
 
@@ -259,7 +350,18 @@ public partial class MainWindow : Window
     private void FormatButton_Click(object sender, RoutedEventArgs e)
     {
         UpdateFormatIcon();
+        HighlightMenu(FormatMenuPanel, CurrentFormatCat());
         FormatPopup.IsOpen = true;
+    }
+
+    // Highlight the row whose Tag matches the current value so the active
+    // choice is obvious.
+    private void HighlightMenu(System.Windows.Controls.Panel panel, string value)
+    {
+        var selected = (Brush)FindResource("AccentSoftBrush");
+        foreach (var child in panel.Children)
+            if (child is Button b && b.Tag is string tag)
+                b.Background = tag == value ? selected : Brushes.Transparent;
     }
 
     private void Format_Selected(object sender, RoutedEventArgs e)
@@ -347,6 +449,12 @@ public partial class MainWindow : Window
     private const string BoxEmpty = "☐";   // checkbox glyph
     private const string BoxDone = "☑";
     private static readonly Color AccentColor = (Color)ColorConverter.ConvertFromString("#7C5CFF");
+    // Render the box glyphs from one symbol font with text (not emoji) presentation
+    // so the empty and checked boxes are the same size.
+    private static readonly FontFamily CheckFont = new FontFamily("Segoe UI Symbol");
+    private static string GlyphText(bool done) => (done ? BoxDone : BoxEmpty) + "︎  ";
+    private static Run NewGlyphRun(bool done) =>
+        new Run(GlyphText(done)) { Foreground = new SolidColorBrush(AccentColor), FontFamily = CheckFont };
 
     private static bool IsCheck(Paragraph p)
     {
@@ -365,7 +473,7 @@ public partial class MainWindow : Window
         if (IsCheck(p))
             return;
         p.Tag = CheckTag;
-        var glyph = new Run(BoxEmpty + "  ") { Foreground = new SolidColorBrush(AccentColor) };
+        var glyph = NewGlyphRun(false);
         if (p.Inlines.FirstInline != null)
             p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
         else
@@ -413,7 +521,10 @@ public partial class MainWindow : Window
 
         var glyph = p.Inlines.FirstInline as Run;
         if (glyph != null)
-            glyph.Text = (ns ? BoxDone : BoxEmpty) + "  ";
+        {
+            glyph.Text = GlyphText(ns);
+            glyph.FontFamily = CheckFont;
+        }
 
         foreach (var inl in p.Inlines.ToList())
         {
@@ -450,13 +561,13 @@ public partial class MainWindow : Window
             bool done = (p.Tag as string) == CheckDoneTag;
             if (p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
             {
-                r.Text = (done ? BoxDone : BoxEmpty) + "  ";
+                r.Text = GlyphText(done);
                 r.Foreground = new SolidColorBrush(AccentColor);
+                r.FontFamily = CheckFont;
             }
             else
             {
-                var glyph = new Run((done ? BoxDone : BoxEmpty) + "  ")
-                { Foreground = new SolidColorBrush(AccentColor) };
+                var glyph = NewGlyphRun(done);
                 if (p.Inlines.FirstInline != null)
                     p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
                 else
@@ -598,7 +709,20 @@ public partial class MainWindow : Window
     // Alignment + indentation
     // ============================================================
 
-    private void AlignButton_Click(object sender, RoutedEventArgs e) => AlignPopup.IsOpen = true;
+    private void AlignButton_Click(object sender, RoutedEventArgs e)
+    {
+        HighlightMenu(AlignMenuPanel, CurrentAlign());
+        AlignPopup.IsOpen = true;
+    }
+
+    private string CurrentAlign() =>
+        (Editor.Selection.Start.Paragraph?.TextAlignment ?? TextAlignment.Left) switch
+        {
+            TextAlignment.Center => "Center",
+            TextAlignment.Right => "Right",
+            TextAlignment.Justify => "Justify",
+            _ => "Left"
+        };
 
     private void Align_Selected(object sender, RoutedEventArgs e)
     {
@@ -674,44 +798,80 @@ public partial class MainWindow : Window
         }
     }
 
-    private void UpdateFormatIcon()
+    private void UpdateFormatIcon() => FormatIcon.Content = MakeFormatIcon(CurrentFormatCat(), 14);
+
+    private string CurrentFormatCat()
     {
         var p = Editor.Selection.Start.Paragraph;
-        string cat = "Normal";
-        if (p != null)
-        {
-            if (p.Parent is ListItem li && li.Parent is List list)
-                cat = list.MarkerStyle == TextMarkerStyle.Decimal ? "Numbered" : "Bulleted";
-            else
-                cat = p.Tag as string ?? "Normal";
-        }
-        SetFormatIcon(cat);
+        if (p == null)
+            return "Normal";
+        if (p.Parent is ListItem li && li.Parent is List list)
+            return list.MarkerStyle == TextMarkerStyle.Decimal ? "Numbered" : "Bulleted";
+        var t = p.Tag as string;
+        if (t == CheckTag || t == CheckDoneTag)
+            return "Check";
+        return t ?? "Normal";
     }
 
-    private void SetFormatIcon(string cat)
+    private static UIElement MakeFormatIcon(string cat, double size)
     {
-        var mdl2 = new FontFamily("Segoe MDL2 Assets");
-        switch (cat)
+        if (cat == "Numbered")
+            return MakeNumberedIcon(size);
+        if (cat is "H1" or "H2" or "H3")
+            return new TextBlock
+            {
+                Text = cat, FontWeight = FontWeights.Bold, FontSize = size - 1,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+        string glyph = cat switch
         {
-            case "H1": case "H2": case "H3":
-                FormatIcon.FontFamily = new FontFamily("Segoe UI");
-                FormatIcon.FontWeight = FontWeights.Bold;
-                FormatIcon.Text = cat;
-                break;
-            case "Bulleted":
-                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
-                FormatIcon.Text = ""; break;
-            case "Numbered":
-                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
-                FormatIcon.Text = ""; break;
-            case "Check":
-                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
-                FormatIcon.Text = ""; break;
-            default:
-                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
-                FormatIcon.Text = ""; break;
-        }
+            "Bulleted" => "\uE8FD",
+            "Check" => "\uE9D5",
+            _ => "\uE8E4"
+        };
+        return new TextBlock
+        {
+            Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = size, VerticalAlignment = VerticalAlignment.Center
+        };
     }
+
+    // A numbered-list icon drawn to match the bulleted/check list icons:
+    // three short lines, each with a number on the left.
+    private static UIElement MakeNumberedIcon(double size)
+    {
+        var vb = new Viewbox { Width = size + 2, Height = size + 2, VerticalAlignment = VerticalAlignment.Center };
+        var col = new StackPanel();
+        for (int i = 1; i <= 3; i++)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 1.6) };
+            var num = new TextBlock
+            {
+                Text = i.ToString(), FontSize = 5.5, Width = 6,
+                TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+            };
+            var line = new Border
+            {
+                Width = 11, Height = 2, CornerRadius = new CornerRadius(1),
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(1.5, 0, 0, 0)
+            };
+            num.SetBinding(TextBlock.ForegroundProperty, FollowButtonForeground());
+            line.SetBinding(Border.BackgroundProperty, FollowButtonForeground());
+            row.Children.Add(num);
+            row.Children.Add(line);
+            col.Children.Add(row);
+        }
+        vb.Child = col;
+        return vb;
+    }
+
+    private static System.Windows.Data.Binding FollowButtonForeground() =>
+        new System.Windows.Data.Binding("Foreground")
+        {
+            RelativeSource = new System.Windows.Data.RelativeSource(
+                System.Windows.Data.RelativeSourceMode.FindAncestor)
+            { AncestorType = typeof(System.Windows.Controls.Primitives.ButtonBase) }
+        };
 
     private void UpdateAlignIcon()
     {

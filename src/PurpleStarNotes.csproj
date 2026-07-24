@@ -14,7 +14,7 @@
     <!-- Icon shown on the .exe in Explorer, on shortcuts, and the taskbar -->
     <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- Bump this for each release; the tag you push (vX.Y.Z) should match. -->
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
     <Company>mdoulos</Company>
     <Product>Purple Star Notes</Product>
   </PropertyGroup>

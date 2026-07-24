@@ -25,11 +25,19 @@ public class Note : INotifyPropertyChanged
     public string ContentXaml { get; set; } = "";
 
     private string _preview = "";
-    /// <summary>Plain-text snippet shown in the sidebar (cached for speed).</summary>
+    /// <summary>Auto-generated plain-text preview of the body (cached for speed).</summary>
     public string Preview
     {
         get => _preview;
         set { _preview = value; OnPropertyChanged(); OnPropertyChanged(nameof(Snippet)); }
+    }
+
+    private string _customSnippet = "";
+    /// <summary>User-set snippet; when present it is shown in the sidebar instead of the preview.</summary>
+    public string CustomSnippet
+    {
+        get => _customSnippet;
+        set { _customSnippet = value; OnPropertyChanged(); OnPropertyChanged(nameof(Snippet)); }
     }
 
     public List<string> Tags { get; set; } = new();
@@ -54,7 +62,10 @@ public class Note : INotifyPropertyChanged
     public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "Untitled Note" : Title;
 
     [JsonIgnore]
-    public string Snippet => string.IsNullOrWhiteSpace(Preview) ? "No additional text" : Preview;
+    public string Snippet =>
+        !string.IsNullOrWhiteSpace(CustomSnippet) ? CustomSnippet
+        : !string.IsNullOrWhiteSpace(Preview) ? Preview
+        : "No additional text";
 
     [JsonIgnore]
     public string ModifiedDisplay => "Modified " + Modified.ToString("dddd, MMM d, yyyy, hh:mm tt");
