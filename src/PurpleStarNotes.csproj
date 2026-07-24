@@ -22,6 +22,9 @@
   <ItemGroup>
     <!-- Same icon, embedded as a resource so the running window can use it too -->
     <Resource Include="app.ico" />
+    <!-- Source of truth for the in-app changelog; embedded so the running app can
+         read it regardless of where it is installed. -->
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
   </ItemGroup>
 
 </Project>
