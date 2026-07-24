@@ -1313,6 +1313,13 @@ public partial class MainWindow : Window
 
     private static IEnumerable<Note> ChangelogEntries() => new[]
     {
+        MakeChangelogNote("v1.1.7", new DateTime(2026, 7, 24, 12, 0, 0), new[]
+        {
+            "Added a menu (hamburger) button next to Check for Updates with a Changelog view.",
+            "The changelog opens read-only in the main window with an Exit Changelog button.",
+            "Moved the light/dark toggle between Check for Updates and the menu button.",
+            "Tightened the checkbox toggle area so it no longer extends past the box.",
+        }),
         MakeChangelogNote("v1.1.6", new DateTime(2026, 7, 24), new[]
         {
             "Fixed check lists not showing a checkbox when converting text to a check list.",
