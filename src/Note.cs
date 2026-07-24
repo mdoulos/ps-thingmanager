@@ -73,7 +73,13 @@ public class Note : INotifyPropertyChanged
     public DateTime Modified
     {
         get => _modified;
-        set { _modified = value; OnPropertyChanged(); OnPropertyChanged(nameof(ModifiedDisplay)); }
+        set
+        {
+            _modified = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ModifiedDisplay));
+            OnPropertyChanged(nameof(DateLabelDisplay));
+        }
     }
 
     // ---- Computed display helpers (not persisted) ----
@@ -89,6 +95,11 @@ public class Note : INotifyPropertyChanged
 
     [JsonIgnore]
     public string ModifiedDisplay => "Modified " + Modified.ToString("dddd, MMM d, yyyy, hh:mm tt");
+
+    /// <summary>Sidebar date line: changelog entries are "Released", others "Modified".</summary>
+    [JsonIgnore]
+    public string DateLabelDisplay =>
+        (IsChangelog ? "Released " : "Modified ") + Modified.ToString("dddd, MMM d, yyyy, hh:mm tt");
 
     /// <summary>True when this note is an internal changelog entry.</summary>
     [JsonIgnore]
