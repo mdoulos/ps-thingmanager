@@ -1311,34 +1311,91 @@ public partial class MainWindow : Window
             NoteStore.Save(_notes);
     }
 
-    private static IEnumerable<Note> ChangelogEntries() => new[]
+    // The changelog is authored in /CHANGELOG.md (embedded as a resource) and
+    // parsed into one note per version, so adding a release is a docs-only change.
+    private static IEnumerable<Note> ChangelogEntries()
     {
-        MakeChangelogNote("v1.1.6", new DateTime(2026, 7, 24), new[]
+        var parsed = ParseChangelog(LoadChangelogMarkdown());
+
+        // Break same-date ties by file order (top of the file = newest) so the
+        // list matches the file even when several versions share a date.
+        var notes = new List<Note>();
+        for (int i = 0; i < parsed.Count; i++)
+            notes.Add(MakeChangelogNote(
+                parsed[i].Version,
+                parsed[i].Date.AddSeconds(parsed.Count - i),
+                parsed[i].Lines.ToArray()));
+        return notes;
+    }
+
+    private static string LoadChangelogMarkdown()
+    {
+        try
         {
-            "Fixed check lists not showing a checkbox when converting text to a check list.",
-            "Widened the checkbox click area and tightened check-list spacing.",
-            "Enter continues a check list; Enter on an empty item leaves the list.",
-            "The sidebar now shows a note's tags under the modified date.",
-            "Added a Cancel button to the Description popup.",
-        }),
-        MakeChangelogNote("v1.1.4", new DateTime(2026, 7, 20), new[]
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("CHANGELOG.md");
+            if (stream == null)
+                return "";
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch
         {
-            "Upgrade-friendly installer that keeps your notes between updates.",
-            "Added tag filtering in the sidebar.",
-            "Bigger, easier-to-click checkboxes and general icon polish.",
-        }),
-        MakeChangelogNote("v1.1.2", new DateTime(2026, 7, 16), new[]
+            return "";   // never let a missing/unreadable changelog break startup
+        }
+    }
+
+    // Parse a Keep-a-Changelog-style file: "## <version> — <yyyy-MM-dd>" headers
+    // (em dash or hyphen; date optional) followed by "-"/"*" bullet lines.
+    private static List<(string Version, DateTime Date, List<string> Lines)> ParseChangelog(string md)
+    {
+        var result = new List<(string, DateTime, List<string>)>();
+        if (string.IsNullOrWhiteSpace(md))
+            return result;
+
+        string? version = null;
+        DateTime date = DateTime.Today;
+        List<string>? lines = null;
+
+        void Flush()
         {
-            "Fixed a startup crash caused by older check-list notes.",
-            "Added a global crash handler for a friendlier failure.",
-        }),
-        MakeChangelogNote("v1.1.0", new DateTime(2026, 7, 12), new[]
+            if (version != null && lines is { Count: > 0 })
+                result.Add((version, date, lines));
+        }
+
+        foreach (var raw in md.Replace("\r\n", "\n").Split('\n'))
         {
-            "Renamed the app to Purple Star Notes.",
-            "Overhauled the editor, theming, and formatting toolbar.",
-            "Added headings, lists, alignment, text color, and font sizing.",
-        }),
-    };
+            string line = raw.Trim();
+            if (line.StartsWith("## "))
+            {
+                Flush();
+                lines = new List<string>();
+                date = DateTime.Today;
+
+                string header = line.Substring(3).Trim();
+                int sep = header.IndexOf('—');   // em dash
+                if (sep < 0) sep = header.IndexOf('-');
+                if (sep >= 0)
+                {
+                    version = header.Substring(0, sep).Trim();
+                    string datePart = header.Substring(sep + 1).Trim();
+                    if (DateTime.TryParse(datePart, System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out var d))
+                        date = d;
+                }
+                else
+                {
+                    version = header;
+                }
+            }
+            else if (lines != null && (line.StartsWith("- ") || line.StartsWith("* ")))
+            {
+                lines.Add(line.Substring(2).Trim());
+            }
+        }
+        Flush();
+        return result;
+    }
 
     private static Note MakeChangelogNote(string title, DateTime date, string[] lines)
     {
