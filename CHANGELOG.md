@@ -11,6 +11,17 @@ You can instead name the version yourself with a `## vX.Y.Z — YYYY-MM-DD`
 heading. Newest version first.
 
 ## Unreleased
+- Tags can now have a custom color and icon: Manage Tags → Edit Tag (pencil)
+  opens a name box, a color palette, and an icon picker; the chosen icon/color
+  replace the default tag glyph everywhere the tag appears.
+- Group Locations: each location has an Edit button for display options — Show
+  Tag Colors, Show Group Name, and a Presentation choice (Normal or Stretch);
+  the bookmark bar always wraps tags to new rows.
+- Clicking a note's title in a group's combined view now opens that note.
+- Thinner, theme-matched scrollbars replace the default grey ones.
+- The tag menu now grows to fit its contents and only scrolls when it would be
+  taller than the window.
+- Removed the leftover white boxes beside right-click menu items.
 - Added Tag Groups: organise tags into named groups (Manage Groups) and manage
   tags themselves (Manage Tags) — rename, delete with double-confirm, and see how
   many notes use each tag.
