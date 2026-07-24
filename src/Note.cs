@@ -45,6 +45,15 @@ public class Note : INotifyPropertyChanged
 
     public List<string> Tags { get; set; } = new();
 
+    private List<string> _visibleTags = new();
+    /// <summary>Tags shown in the sidebar (all tags, minus the active filter tag). Not persisted.</summary>
+    [JsonIgnore]
+    public List<string> VisibleTags
+    {
+        get => _visibleTags;
+        set { _visibleTags = value; OnPropertyChanged(); }
+    }
+
     /// <summary>
     /// Per-note remembered font size for each text category (Normal/H1/H2/H3).
     /// When the user resizes text, the size for that category is stored here so

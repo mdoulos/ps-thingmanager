@@ -75,6 +75,9 @@ public partial class MainWindow : Window
     {
         UpdateTagButtonVisibility();
 
+        foreach (var n in _notes)
+            n.VisibleTags = VisibleTagsFor(n);
+
         IEnumerable<Note> view = _notes.OrderByDescending(n => n.Modified);
 
         if (!string.IsNullOrEmpty(_tagFilter))
@@ -249,6 +252,12 @@ public partial class MainWindow : Window
               .Distinct(StringComparer.OrdinalIgnoreCase)
               .OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
 
+    // Tags to show on a note in the sidebar: all of them, minus the active filter.
+    private List<string> VisibleTagsFor(Note n) =>
+        string.IsNullOrEmpty(_tagFilter)
+            ? n.Tags.ToList()
+            : n.Tags.Where(t => !t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
     // The Tags button only appears once at least one tag exists; a stale filter
     // (its tag was removed) is cleared.
     private void UpdateTagButtonVisibility()
@@ -334,6 +343,7 @@ public partial class MainWindow : Window
             return;
         _currentTags.Add(tag);
         _current.Tags = _currentTags.ToList();
+        _current.VisibleTags = VisibleTagsFor(_current);
         UpdateTagButtonVisibility();
         ScheduleSave();
     }
@@ -344,7 +354,10 @@ public partial class MainWindow : Window
         {
             _currentTags.Remove(tag);
             if (_current != null)
+            {
                 _current.Tags = _currentTags.ToList();
+                _current.VisibleTags = VisibleTagsFor(_current);
+            }
             UpdateTagButtonVisibility();
             ScheduleSave();
         }
@@ -393,6 +406,8 @@ public partial class MainWindow : Window
             NoteStore.Save(_notes);
         }
     }
+
+    private void SnippetCancel_Click(object sender, RoutedEventArgs e) => SnippetPopup.IsOpen = false;
 
     // ============================================================
     // Inline formatting (B / I / U / S)
@@ -484,10 +499,9 @@ public partial class MainWindow : Window
             }
             else if (cat == "Check")
             {
-                p.Tag = "Check";
                 p.FontWeight = FontWeights.Normal;
                 p.FontSize = SizeFor("Normal");
-                AddChecklist(p);
+                MakeCheckItem(p);   // sets tag + style + glyph
             }
             else // Normal
             {
@@ -560,17 +574,29 @@ public partial class MainWindow : Window
         return t != null && (t.StartsWith(BoxEmpty) || t.StartsWith(BoxDone));
     }
 
-    private void AddChecklist(Paragraph p)
+    private void AddChecklist(Paragraph p) => MakeCheckItem(p);
+
+    // Turns a paragraph into a check item: sets the tag + tight spacing and
+    // ensures a box glyph is present as the first inline (idempotent).
+    private void MakeCheckItem(Paragraph p, bool done = false)
     {
-        if (IsCheck(p))
-            return;
-        p.Tag = CheckTag;
+        p.Tag = done ? CheckDoneTag : CheckTag;
         StyleCheckParagraph(p);
-        var glyph = NewGlyph(false);
-        if (p.Inlines.FirstInline != null)
-            p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
-        else
-            p.Inlines.Add(glyph);
+        if (!(p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text)))
+        {
+            var glyph = NewGlyph(done);
+            if (p.Inlines.FirstInline != null)
+                p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
+            else
+                p.Inlines.Add(glyph);
+        }
+    }
+
+    private static bool IsCheckItemEmpty(Paragraph p)
+    {
+        string text = new TextRange(p.ContentStart, p.ContentEnd).Text;
+        text = text.Replace(BoxEmpty, "").Replace(BoxDone, "").Replace("︎", "").Trim();
+        return text.Length == 0;
     }
 
     private void RemoveChecklist(Paragraph p)
@@ -606,16 +632,16 @@ public partial class MainWindow : Window
         if (tp?.Paragraph is Paragraph p && IsCheck(p) &&
             p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
         {
-            // GetCharacterRect returns a thin caret rect, so measure the box
-            // width from the caret before it and the caret just after it.
+            // GetCharacterRect returns a thin caret rect at a position, so take
+            // the caret X before the box (left edge) and just after it (right edge).
             Rect a = r.ContentStart.GetCharacterRect(LogicalDirection.Forward);
             var afterBox = r.ContentStart.GetPositionAtOffset(1, LogicalDirection.Forward);
-            Rect b = (afterBox ?? r.ContentEnd).GetCharacterRect(LogicalDirection.Backward);
-            double left = Math.Min(a.Left, b.Left);
-            double right = Math.Max(a.Left, b.Left);
-            double top = Math.Min(a.Top, b.Top);
-            double bottom = Math.Max(a.Bottom, b.Bottom);
-            if (pt.X >= left - 3 && pt.X <= right + 4 && pt.Y >= top && pt.Y <= bottom)
+            Rect c = (afterBox ?? r.ContentEnd).GetCharacterRect(LogicalDirection.Forward);
+            double left = a.Left;
+            double right = c.Left;
+            if (right - left < 6)           // measurement failed: assume a square box
+                right = left + a.Height;
+            if (pt.X >= left - 3 && pt.X <= right + 4 && pt.Y >= a.Top - 2 && pt.Y <= a.Bottom + 2)
                 return p;
         }
         return null;
@@ -635,6 +661,35 @@ public partial class MainWindow : Window
     private void Editor_MouseMove(object sender, MouseEventArgs e)
     {
         Editor.Cursor = CheckboxHit(e.GetPosition(Editor)) != null ? Cursors.Hand : Cursors.IBeam;
+    }
+
+    // Enter inside a check item starts a new check item; Enter on an empty
+    // check item exits the list (like ordered/unordered lists).
+    private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Return || (Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            return;
+
+        var p = Editor.CaretPosition?.Paragraph;
+        if (p == null || !IsCheck(p))
+            return;
+
+        e.Handled = true;
+        if (IsCheckItemEmpty(p))
+        {
+            RemoveChecklist(p);   // leave the list
+            return;
+        }
+
+        EditingCommands.EnterParagraphBreak.Execute(null, Editor);
+        var np = Editor.CaretPosition?.Paragraph;
+        if (np != null)
+        {
+            MakeCheckItem(np);
+            if (np.Inlines.FirstInline != null)
+                Editor.CaretPosition = np.Inlines.FirstInline.ContentEnd;
+        }
+        ScheduleSave();
     }
 
     private void ToggleCheckParagraph(Paragraph p)

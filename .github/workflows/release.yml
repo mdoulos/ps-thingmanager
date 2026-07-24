@@ -12,7 +12,7 @@ on:
       version:
         description: 'Version to release, e.g. 1.0.0 (publishes a Release tagged v<version>)'
         required: true
-        default: '1.1.5'
+        default: '1.1.6'
 
 permissions:
   contents: write   # needed to create the Release and its tag

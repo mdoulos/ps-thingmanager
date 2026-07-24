@@ -95,6 +95,27 @@
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="11" Margin="0,7,0,0"
                                            TextTrimming="CharacterEllipsis"/>
+                                <ItemsControl ItemsSource="{Binding VisibleTags}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource FieldBrush}"
+                                                    CornerRadius="5" Padding="6,2" Margin="0,7,5,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="&#xE8EC;" FontFamily="Segoe MDL2 Assets"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource AccentBrush}"
+                                                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{Binding}"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                               FontSize="11.5" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -108,7 +129,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.5"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.6"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -300,7 +321,8 @@
                              SelectionChanged="Editor_SelectionChanged"
                              TextChanged="Editor_TextChanged"
                              PreviewMouseLeftButtonDown="Editor_PreviewMouseLeftButtonDown"
-                             MouseMove="Editor_MouseMove">
+                             MouseMove="Editor_MouseMove"
+                             PreviewKeyDown="Editor_PreviewKeyDown">
                     <RichTextBox.Resources>
                         <Style TargetType="Paragraph">
                             <Setter Property="Margin" Value="0,0,0,10"/>
@@ -561,6 +583,8 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                         <Button Content="Clear" Style="{StaticResource LinkButton}" FontSize="13"
                                 Margin="0,0,16,0" Click="SnippetClear_Click"/>
+                        <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="SnippetCancel_Click"/>
                         <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
                                 Click="SnippetSave_Click"/>
                     </StackPanel>
