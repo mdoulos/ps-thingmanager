@@ -1315,7 +1315,11 @@ public partial class MainWindow : Window
     // parsed into one note per version, so adding a release is a docs-only change.
     private static IEnumerable<Note> ChangelogEntries()
     {
-        var parsed = ParseChangelog(LoadChangelogMarkdown());
+        // The "Unreleased" section holds pending notes that CI has not stamped
+        // with a version yet, so it isn't shown as a changelog entry.
+        var parsed = ParseChangelog(LoadChangelogMarkdown())
+            .Where(e => !e.Version.Equals("Unreleased", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         // Break same-date ties by file order (top of the file = newest) so the
         // list matches the file even when several versions share a date.
