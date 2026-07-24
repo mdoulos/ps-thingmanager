@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
-namespace SimpleNotes;
+namespace PurpleStarNotes;
 
 /// <summary>
 /// A single note. Implements INotifyPropertyChanged so that the note list in
@@ -33,6 +33,13 @@ public class Note : INotifyPropertyChanged
     }
 
     public List<string> Tags { get; set; } = new();
+
+    /// <summary>
+    /// Per-note remembered font size for each text category (Normal/H1/H2/H3).
+    /// When the user resizes text, the size for that category is stored here so
+    /// new text of the same category picks up the same custom size.
+    /// </summary>
+    public Dictionary<string, double> CategorySizes { get; set; } = new();
 
     private DateTime _modified = DateTime.Now;
     public DateTime Modified

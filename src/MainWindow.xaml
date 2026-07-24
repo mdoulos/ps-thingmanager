@@ -1,12 +1,12 @@
-<Window x:Class="SimpleNotes.MainWindow"
+<Window x:Class="PurpleStarNotes.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:SimpleNotes"
-        Title="Simple Notes"
+        xmlns:local="clr-namespace:PurpleStarNotes"
+        Title="Purple Star Notes"
         Icon="app.ico"
         Height="640" Width="1120"
-        MinHeight="420" MinWidth="760"
-        Background="{StaticResource WindowBgBrush}"
+        MinHeight="440" MinWidth="820"
+        Background="{DynamicResource WindowBgBrush}"
         FontFamily="Segoe UI"
         TextOptions.TextFormattingMode="Ideal"
         UseLayoutRounding="True">
@@ -21,8 +21,8 @@
         <!-- ============================================================ -->
         <!-- LEFT SIDEBAR                                                  -->
         <!-- ============================================================ -->
-        <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}">
-            <Grid Margin="0">
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBgBrush}">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -33,7 +33,7 @@
                 <!-- Header: "Notes" + sort + add -->
                 <Grid Grid.Row="0" Margin="18,16,14,6">
                     <TextBlock Text="Notes"
-                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
                                FontSize="20" FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -48,7 +48,7 @@
 
                 <!-- Search box -->
                 <Border Grid.Row="1" Margin="14,8,14,10"
-                        Background="{StaticResource FieldBrush}"
+                        Background="{DynamicResource FieldBrush}"
                         CornerRadius="10" Padding="12,0">
                     <Grid Height="40">
                         <Grid.ColumnDefinitions>
@@ -57,7 +57,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="&#xE721;"
                                    FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                   Foreground="{StaticResource TextMutedBrush}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <TextBox x:Name="SearchBox" Grid.Column="1"
                                  Style="{StaticResource PlaceholderTextBox}"
@@ -80,21 +80,21 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="&#xE8A1;"
+                                <TextBlock Grid.Column="0" Text="&#xE734;"
                                            FontFamily="Segoe MDL2 Assets" FontSize="15"
-                                           Foreground="{StaticResource AccentBrush}"
+                                           Foreground="{DynamicResource AccentBrush}"
                                            VerticalAlignment="Top" Margin="0,2,11,0"/>
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding DisplayTitle}"
-                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                FontWeight="SemiBold" FontSize="14"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding Snippet}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
                                                FontSize="12.5" Margin="0,4,0,0"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding ModifiedDisplay}"
-                                               Foreground="{StaticResource TextMutedBrush}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="11" Margin="0,7,0,0"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
@@ -103,21 +103,25 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Footer: version + check for updates -->
-                <Border Grid.Row="3" BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="0,1,0,0" Padding="16,9">
+                <!-- Footer: version + theme toggle + check for updates -->
+                <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,1,0,0" Padding="16,7,10,7">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.0.0"
-                                   Foreground="{StaticResource TextMutedBrush}"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.0"
+                                   Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
-                        <Button x:Name="UpdateButton" Grid.Column="1"
-                                Style="{StaticResource LinkButton}"
-                                Content="Check for updates"
-                                Click="UpdateButton_Click"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="ThemeToggleButton" Style="{StaticResource IconButton}"
+                                    Content="&#xE706;" ToolTip="Toggle light / dark mode"
+                                    Click="ThemeToggleButton_Click"/>
+                            <Button x:Name="UpdateButton" Style="{StaticResource LinkButton}"
+                                    Content="Check for updates" Margin="4,0,4,0"
+                                    Click="UpdateButton_Click"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
@@ -125,13 +129,13 @@
 
         <!-- Splitter -->
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                      Background="{StaticResource BorderBrush}"
+                      Background="{DynamicResource BorderBrush}"
                       ResizeBehavior="PreviousAndNext"/>
 
         <!-- ============================================================ -->
         <!-- RIGHT EDITOR PANE                                             -->
         <!-- ============================================================ -->
-        <Border Grid.Column="2" Background="{StaticResource PanelBgBrush}">
+        <Border Grid.Column="2" Background="{DynamicResource PanelBgBrush}">
             <Grid x:Name="EditorRoot" Margin="26,18,26,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>  <!-- title + actions -->
@@ -140,7 +144,7 @@
                     <RowDefinition Height="*"/>     <!-- editor -->
                 </Grid.RowDefinitions>
 
-                <!-- Title + top-right action icons -->
+                <!-- Title + delete -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -151,14 +155,10 @@
                              Tag="Untitled Note"
                              FontSize="24" FontWeight="Bold"
                              TextChanged="TitleBox_TextChanged"/>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71B;" ToolTip="Link"/>
-                        <Button Style="{StaticResource IconButton}" Content="&#xE8A1;" ToolTip="Outline"/>
-                        <Button Style="{StaticResource IconButton}" Content="&#xE840;" ToolTip="Pin"/>
-                        <Button x:Name="DeleteButton" Style="{StaticResource IconButton}"
-                                Content="&#xE712;" ToolTip="Delete note"
-                                Click="DeleteButton_Click"/>
-                    </StackPanel>
+                    <Button x:Name="DeleteButton" Grid.Column="1"
+                            Style="{StaticResource IconButton}"
+                            Content="&#xE74D;" ToolTip="Delete note"
+                            Click="DeleteButton_Click"/>
                 </Grid>
 
                 <!-- Tags row -->
@@ -172,18 +172,18 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="{StaticResource FieldBrush}"
+                                    <Border Background="{DynamicResource FieldBrush}"
                                             CornerRadius="6" Padding="8,3" Margin="0,0,6,0">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="&#x2756;" FontSize="10"
-                                                       Foreground="{StaticResource AccentBrush}"
+                                                       Foreground="{DynamicResource AccentBrush}"
                                                        VerticalAlignment="Center" Margin="0,0,5,0"/>
                                             <TextBlock Text="{Binding}"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
                                                        FontSize="12" VerticalAlignment="Center"/>
                                             <Button Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
                                                     FontSize="9" Margin="6,0,0,0"
-                                                    Foreground="{StaticResource TextMutedBrush}"
+                                                    Foreground="{DynamicResource TextMutedBrush}"
                                                     Background="Transparent" BorderThickness="0"
                                                     Cursor="Hand" ToolTip="Remove tag"
                                                     Click="RemoveTag_Click"/>
@@ -201,9 +201,24 @@
                 </Border>
 
                 <!-- Formatting toolbar -->
-                <Border Grid.Row="2" Background="{StaticResource FieldBrush}"
+                <Border Grid.Row="2" Background="{DynamicResource FieldBrush}"
                         CornerRadius="10" Padding="8,5" Margin="0,0,0,12">
                     <StackPanel Orientation="Horizontal">
+
+                        <!-- Formatting dropdown (shows current format's icon) -->
+                        <Button x:Name="FormatButton" Style="{StaticResource ToolButton}"
+                                ToolTip="Paragraph format" Click="FormatButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="FormatIcon" Text="&#xE8E4;"
+                                           FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+
                         <ToggleButton x:Name="BoldBtn" Style="{StaticResource FormatToggle}"
                                       ToolTip="Bold (Ctrl+B)" Click="Bold_Click">
                             <TextBlock Text="B" FontWeight="Bold"/>
@@ -221,58 +236,59 @@
                             <TextBlock Text="S" TextDecorations="Strikethrough"/>
                         </ToggleButton>
 
-                        <Border Width="1" Margin="6,4" Background="{StaticResource BorderBrush}"/>
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
 
-                        <ToggleButton x:Name="BulletBtn" Style="{StaticResource FormatToggle}"
-                                      ToolTip="Bulleted list" Click="Bullets_Click">
-                            <TextBlock Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                        </ToggleButton>
-                        <ToggleButton x:Name="NumberBtn" Style="{StaticResource FormatToggle}"
-                                      ToolTip="Numbered list" Click="Numbering_Click">
-                            <TextBlock Text="&#xF12B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                        </ToggleButton>
+                        <!-- Decrease / increase font size by 1 -->
+                        <Button x:Name="SizeDownBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Decrease text size" Click="SizeDown_Click">
+                            <TextBlock Text="&#x2013;" FontSize="16"/>
+                        </Button>
+                        <Button x:Name="SizeUpBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Increase text size" Click="SizeUp_Click">
+                            <TextBlock Text="+" FontSize="16"/>
+                        </Button>
 
-                        <Border Width="1" Margin="6,4" Background="{StaticResource BorderBrush}"/>
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
 
-                        <ComboBox x:Name="FontFamilyCombo" Width="140" Height="28"
-                                  VerticalAlignment="Center" Margin="2,0"
-                                  ToolTip="Font"
-                                  SelectionChanged="FontFamilyCombo_SelectionChanged">
-                            <ComboBoxItem Content="Segoe UI" IsSelected="True"/>
-                            <ComboBoxItem Content="Arial"/>
-                            <ComboBoxItem Content="Calibri"/>
-                            <ComboBoxItem Content="Cambria"/>
-                            <ComboBoxItem Content="Consolas"/>
-                            <ComboBoxItem Content="Georgia"/>
-                            <ComboBoxItem Content="Times New Roman"/>
-                            <ComboBoxItem Content="Verdana"/>
-                        </ComboBox>
+                        <!-- Text color + clear -->
+                        <Button x:Name="ColorBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Text color" Click="Color_Click">
+                            <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
+                        </Button>
+                        <Button x:Name="ClearColorBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Reset to default color" Click="ClearColor_Click">
+                            <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                        </Button>
 
-                        <ComboBox x:Name="FontSizeCombo" Width="64" Height="28" IsEditable="True"
-                                  VerticalAlignment="Center" Margin="2,0"
-                                  ToolTip="Font size"
-                                  SelectionChanged="FontSizeCombo_SelectionChanged"
-                                  KeyDown="FontSizeCombo_KeyDown">
-                            <ComboBoxItem Content="10"/>
-                            <ComboBoxItem Content="11"/>
-                            <ComboBoxItem Content="12"/>
-                            <ComboBoxItem Content="14" IsSelected="True"/>
-                            <ComboBoxItem Content="16"/>
-                            <ComboBoxItem Content="18"/>
-                            <ComboBoxItem Content="20"/>
-                            <ComboBoxItem Content="24"/>
-                            <ComboBoxItem Content="28"/>
-                            <ComboBoxItem Content="32"/>
-                            <ComboBoxItem Content="48"/>
-                        </ComboBox>
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+
+                        <!-- Alignment dropdown -->
+                        <Button x:Name="AlignButton" Style="{StaticResource ToolButton}"
+                                ToolTip="Text alignment" Click="AlignButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="AlignIcon" Text="&#xE8E4;"
+                                           FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="OutdentBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Decrease indent" Click="Outdent_Click">
+                            <TextBlock Text="&#xE162;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                        </Button>
+                        <Button x:Name="IndentBtn" Style="{StaticResource ToolButton}"
+                                ToolTip="Increase indent" Click="Indent_Click">
+                            <TextBlock Text="&#xE161;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                        </Button>
                     </StackPanel>
                 </Border>
 
                 <!-- Rich text editor -->
                 <RichTextBox x:Name="Editor" Grid.Row="3"
                              Background="Transparent" BorderThickness="0"
-                             Foreground="{StaticResource TextPrimaryBrush}"
-                             CaretBrush="{StaticResource TextPrimaryBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             CaretBrush="{DynamicResource TextPrimaryBrush}"
                              FontFamily="Segoe UI" FontSize="14"
                              Padding="0,4,0,0"
                              AcceptsTab="True"
@@ -288,5 +304,110 @@
                 </RichTextBox>
             </Grid>
         </Border>
+
+        <!-- ================= Formatting popup ================= -->
+        <Popup x:Name="FormatPopup" PlacementTarget="{Binding ElementName=FormatButton}"
+               Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade" HorizontalOffset="0" VerticalOffset="4">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="5" Width="210">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Normal" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8E4;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Normal" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="H1" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="H1" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="Heading 1" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="H2" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="H2" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="Heading 2" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="H3" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="H3" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="Heading 3" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Border Height="1" Margin="6,5" Background="{DynamicResource BorderBrush}"/>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Bulleted" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Bulleted List" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Numbered" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xF12B;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Numbered List" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Check" Click="Format_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE9D5;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Check List" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Alignment popup ================= -->
+        <Popup x:Name="AlignPopup" PlacementTarget="{Binding ElementName=AlignButton}"
+               Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade" VerticalOffset="4">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="5" Width="170">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Left" Click="Align_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8E4;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Left align" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Center" Click="Align_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8E3;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Center align" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Right" Click="Align_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8E2;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Right align" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource MenuRowButton}" Tag="Justify" Click="Align_Selected">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Justify" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

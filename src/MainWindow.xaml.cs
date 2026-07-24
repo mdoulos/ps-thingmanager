@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
@@ -13,31 +12,31 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 
-namespace SimpleNotes;
+namespace PurpleStarNotes;
 
 public partial class MainWindow : Window
 {
-    // Master list of every note (backs the sidebar).
     private readonly ObservableCollection<Note> _notes = new();
-
-    // Tags shown for the currently open note.
     private readonly ObservableCollection<string> _currentTags = new();
-
     private Note? _current;
-
-    // Debounce timer so we persist to disk shortly after the user stops typing
-    // instead of on every keystroke.
     private readonly DispatcherTimer _saveTimer;
-
-    // Guards against feedback loops while we programmatically update the UI
-    // (setting the title/document/combos would otherwise re-trigger handlers).
     private bool _syncing;
-
     private string _search = "";
+    private readonly AppSettings _settings;
+
+    // Default font size for each paragraph category (overridable per note).
+    private static readonly Dictionary<string, double> DefaultSizes = new()
+    {
+        ["Normal"] = 14, ["H1"] = 32, ["H2"] = 24, ["H3"] = 18,
+        ["Bulleted"] = 14, ["Numbered"] = 14, ["Check"] = 14
+    };
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _settings = AppSettings.Load();               // theme already applied in App.OnStartup
+        UpdateThemeGlyph();
 
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); PersistCurrent(); };
@@ -57,8 +56,6 @@ public partial class MainWindow : Window
     private void LoadAllNotes()
     {
         var loaded = NoteStore.Load();
-
-        // First run: seed a friendly welcome note so the app isn't empty.
         if (loaded.Count == 0)
             loaded.Add(CreateWelcomeNote());
 
@@ -71,7 +68,6 @@ public partial class MainWindow : Window
             NotesList.SelectedItem = _notes[0];
     }
 
-    /// <summary>Applies the current search filter and (re)binds the list.</summary>
     private void RefreshList()
     {
         IEnumerable<Note> view = _notes.OrderByDescending(n => n.Modified);
@@ -91,16 +87,11 @@ public partial class MainWindow : Window
             NotesList.SelectedItem = selected;
     }
 
-    // ============================================================
-    // Selection & editing
-    // ============================================================
-
     private void NotesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (NotesList.SelectedItem is not Note note || note == _current)
             return;
 
-        // Save whatever was open before switching away.
         PersistCurrent();
         LoadNoteIntoEditor(note);
     }
@@ -130,34 +121,42 @@ public partial class MainWindow : Window
             Editor.Document = new FlowDocument();
         }
 
+        RewireChecklists();
+
         _currentTags.Clear();
         foreach (var t in note.Tags)
             _currentTags.Add(t);
 
         _syncing = false;
+        UpdateFormatIcon();
+        UpdateAlignIcon();
     }
 
     private void TitleBox_TextChanged(object sender, TextChangedEventArgs e) => ScheduleSave();
-
     private void Editor_TextChanged(object sender, TextChangedEventArgs e) => ScheduleSave();
 
     private void ScheduleSave()
     {
         if (_syncing || _current == null)
             return;
-
         _saveTimer.Stop();
         _saveTimer.Start();
     }
 
-    /// <summary>Writes the editor's current state back into the note and to disk.</summary>
     private void PersistCurrent()
     {
         if (_current == null)
             return;
 
         _current.Title = TitleBox.Text;
-        _current.ContentXaml = XamlWriter.Save(Editor.Document);
+        try
+        {
+            _current.ContentXaml = XamlWriter.Save(Editor.Document);
+        }
+        catch
+        {
+            // Keep the previously saved content if serialization ever fails.
+        }
 
         var range = new TextRange(Editor.Document.ContentStart, Editor.Document.ContentEnd);
         string text = range.Text.Replace('\r', ' ').Replace('\n', ' ').Trim();
@@ -172,20 +171,18 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // Toolbar buttons: new / sort / delete / search
+    // New / delete / sort / search
     // ============================================================
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
         PersistCurrent();
-
         var note = new Note { Title = "" };
         _notes.Add(note);
         _search = "";
         SearchBox.Text = "";
-
         RefreshList();
-        NotesList.SelectedItem = note;   // triggers load
+        NotesList.SelectedItem = note;
         TitleBox.Focus();
     }
 
@@ -194,7 +191,7 @@ public partial class MainWindow : Window
         if (_current == null)
             return;
 
-        var result = MessageBox.Show(
+        var result = MessageBox.Show(this,
             $"Delete \"{_current.DisplayTitle}\"?",
             "Delete note", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (result != MessageBoxResult.OK)
@@ -204,7 +201,6 @@ public partial class MainWindow : Window
         _current = null;
         _notes.Remove(toRemove);
 
-        // Never leave the app with zero notes.
         if (_notes.Count == 0)
             _notes.Add(new Note { Title = "" });
 
@@ -251,26 +247,17 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // Rich-text formatting
+    // Inline formatting (B / I / U / S)
     // ============================================================
 
     private void Bold_Click(object sender, RoutedEventArgs e)
-    {
-        EditingCommands.ToggleBold.Execute(null, Editor);
-        Editor.Focus();
-    }
+    { EditingCommands.ToggleBold.Execute(null, Editor); Editor.Focus(); }
 
     private void Italic_Click(object sender, RoutedEventArgs e)
-    {
-        EditingCommands.ToggleItalic.Execute(null, Editor);
-        Editor.Focus();
-    }
+    { EditingCommands.ToggleItalic.Execute(null, Editor); Editor.Focus(); }
 
     private void Underline_Click(object sender, RoutedEventArgs e)
-    {
-        EditingCommands.ToggleUnderline.Execute(null, Editor);
-        Editor.Focus();
-    }
+    { EditingCommands.ToggleUnderline.Execute(null, Editor); Editor.Focus(); }
 
     private void Strike_Click(object sender, RoutedEventArgs e)
     {
@@ -278,71 +265,352 @@ public partial class MainWindow : Window
                       as TextDecorationCollection;
         bool hasStrike = current != null &&
                          current.Any(d => d.Location == TextDecorationLocation.Strikethrough);
-
-        Editor.Selection.ApplyPropertyValue(
-            Inline.TextDecorationsProperty,
+        Editor.Selection.ApplyPropertyValue(Inline.TextDecorationsProperty,
             hasStrike ? null : TextDecorations.Strikethrough);
         Editor.Focus();
     }
 
-    private void Bullets_Click(object sender, RoutedEventArgs e)
+    // ============================================================
+    // Paragraph format dropdown (Normal / H1-3 / lists / checklist)
+    // ============================================================
+
+    private void FormatButton_Click(object sender, RoutedEventArgs e)
     {
-        EditingCommands.ToggleBullets.Execute(null, Editor);
-        Editor.Focus();
+        UpdateFormatIcon();
+        FormatPopup.IsOpen = true;
     }
 
-    private void Numbering_Click(object sender, RoutedEventArgs e)
+    private void Format_Selected(object sender, RoutedEventArgs e)
     {
-        EditingCommands.ToggleNumbering.Execute(null, Editor);
-        Editor.Focus();
-    }
-
-    private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_syncing || Editor == null)
+        FormatPopup.IsOpen = false;
+        if (_current == null)
             return;
 
-        if (FontFamilyCombo.SelectedItem is ComboBoxItem item && item.Content is string family)
+        string cat = (string)((Button)sender).Tag;
+        Editor.Focus();
+
+        if (cat == "Bulleted")
         {
-            Editor.Selection.ApplyPropertyValue(
-                TextElement.FontFamilyProperty, new FontFamily(family));
-            Editor.Focus();
+            RemoveChecklistInSelection();
+            EditingCommands.ToggleBullets.Execute(null, Editor);
+        }
+        else if (cat == "Numbered")
+        {
+            RemoveChecklistInSelection();
+            EditingCommands.ToggleNumbering.Execute(null, Editor);
+        }
+        else
+        {
+            RemoveListIfAny();
+            ApplyCategory(cat);
+        }
+
+        UpdateFormatIcon();
+        ScheduleSave();
+    }
+
+    private void ApplyCategory(string cat)
+    {
+        foreach (var p in ParagraphsInSelection().ToList())
+        {
+            RemoveChecklist(p);
+            foreach (var inl in p.Inlines.ToList())
+                inl.ClearValue(TextElement.FontSizeProperty);
+
+            if (cat is "H1" or "H2" or "H3")
+            {
+                p.Tag = cat;
+                p.FontWeight = FontWeights.Bold;
+                p.FontSize = SizeFor(cat);
+            }
+            else if (cat == "Check")
+            {
+                p.Tag = "Check";
+                p.FontWeight = FontWeights.Normal;
+                p.FontSize = SizeFor("Normal");
+                AddChecklist(p);
+            }
+            else // Normal
+            {
+                p.Tag = "Normal";
+                p.FontWeight = FontWeights.Normal;
+                p.FontSize = SizeFor("Normal");
+            }
         }
     }
 
-    private void FontSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RemoveListIfAny()
     {
-        if (_syncing || FontSizeCombo.SelectedItem is not ComboBoxItem item)
-            return;
-        ApplyFontSize(item.Content?.ToString());
-    }
-
-    private void FontSizeCombo_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-            ApplyFontSize(FontSizeCombo.Text);
-    }
-
-    private void ApplyFontSize(string? raw)
-    {
-        if (_syncing || Editor == null)
-            return;
-
-        if (double.TryParse(raw, out double size) && size > 0 && size <= 400)
+        var p = Editor.Selection.Start.Paragraph;
+        if (p?.Parent is ListItem li && li.Parent is List list)
         {
-            Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
-            Editor.Focus();
+            var cmd = list.MarkerStyle == TextMarkerStyle.Decimal
+                ? EditingCommands.ToggleNumbering
+                : EditingCommands.ToggleBullets;
+            cmd.Execute(null, Editor);
         }
     }
 
-    /// <summary>Keeps the toolbar in sync with the formatting under the caret.</summary>
+    // ============================================================
+    // Checklist support
+    // ============================================================
+
+    private CheckBox NewCheckBox()
+    {
+        var cb = new CheckBox
+        {
+            Focusable = false,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+            Cursor = Cursors.Arrow
+        };
+        cb.Checked += CheckItem_Toggled;
+        cb.Unchecked += CheckItem_Toggled;
+        return cb;
+    }
+
+    private void AddChecklist(Paragraph p)
+    {
+        if (HasCheckbox(p))
+            return;
+        var container = new InlineUIContainer(NewCheckBox()) { BaselineAlignment = BaselineAlignment.Center };
+        if (p.Inlines.FirstInline != null)
+            p.Inlines.InsertBefore(p.Inlines.FirstInline, container);
+        else
+            p.Inlines.Add(container);
+    }
+
+    private static bool HasCheckbox(Paragraph p)
+        => p.Inlines.OfType<InlineUIContainer>().Any(c => c.Child is CheckBox);
+
+    private void RemoveChecklist(Paragraph p)
+    {
+        var boxes = p.Inlines.OfType<InlineUIContainer>().Where(c => c.Child is CheckBox).ToList();
+        foreach (var c in boxes)
+            p.Inlines.Remove(c);
+        if (boxes.Count > 0)
+        {
+            foreach (var inl in p.Inlines.ToList())
+            {
+                inl.TextDecorations = null;
+                inl.ClearValue(TextElement.ForegroundProperty);
+            }
+            if ((p.Tag as string) == "Check")
+                p.Tag = "Normal";
+        }
+    }
+
+    private void RemoveChecklistInSelection()
+    {
+        foreach (var p in ParagraphsInSelection().ToList())
+            RemoveChecklist(p);
+    }
+
+    private void CheckItem_Toggled(object sender, RoutedEventArgs e)
+    {
+        var cb = (CheckBox)sender;
+        var p = AllParagraphs().FirstOrDefault(pp =>
+            pp.Inlines.OfType<InlineUIContainer>().Any(c => c.Child == cb));
+        if (p == null)
+            return;
+
+        bool done = cb.IsChecked == true;
+        foreach (var inl in p.Inlines.ToList())
+        {
+            if (inl is InlineUIContainer)
+                continue;
+            inl.TextDecorations = done ? TextDecorations.Strikethrough : null;
+            if (done)
+                inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
+            else
+                inl.ClearValue(TextElement.ForegroundProperty);
+        }
+        ScheduleSave();
+    }
+
+    private void RewireChecklists()
+    {
+        foreach (var p in AllParagraphs())
+        {
+            foreach (var c in p.Inlines.OfType<InlineUIContainer>())
+            {
+                if (c.Child is not CheckBox cb)
+                    continue;
+                cb.Focusable = false;
+                cb.Cursor = Cursors.Arrow;
+                cb.Checked -= CheckItem_Toggled;
+                cb.Unchecked -= CheckItem_Toggled;
+                cb.Checked += CheckItem_Toggled;
+                cb.Unchecked += CheckItem_Toggled;
+
+                bool done = cb.IsChecked == true;
+                foreach (var inl in p.Inlines.ToList())
+                {
+                    if (inl is InlineUIContainer)
+                        continue;
+                    inl.TextDecorations = done ? TextDecorations.Strikethrough : null;
+                    if (done)
+                        inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
+                }
+            }
+        }
+    }
+
+    private void RefreshCheckedItemColors()
+    {
+        foreach (var p in AllParagraphs())
+        {
+            var cb = p.Inlines.OfType<InlineUIContainer>()
+                      .Select(c => c.Child as CheckBox).FirstOrDefault(x => x != null);
+            if (cb?.IsChecked == true)
+                foreach (var inl in p.Inlines.ToList())
+                    if (inl is not InlineUIContainer)
+                        inl.Foreground = new SolidColorBrush(ThemeManager.MutedColor);
+        }
+    }
+
+    // ============================================================
+    // Font size +/- with per-category memory
+    // ============================================================
+
+    private void SizeUp_Click(object sender, RoutedEventArgs e) => ChangeSize(+1);
+    private void SizeDown_Click(object sender, RoutedEventArgs e) => ChangeSize(-1);
+
+    private void ChangeSize(int delta)
+    {
+        if (_current == null)
+            return;
+        Editor.Focus();
+
+        var sel = Editor.Selection;
+        object v = sel.GetPropertyValue(TextElement.FontSizeProperty);
+        string cat = CaretCategory();
+        double cur = v is double d ? d : SizeFor(cat);
+        double ns = Math.Max(6, Math.Min(200, cur + delta));
+
+        if (!sel.IsEmpty)
+        {
+            sel.ApplyPropertyValue(TextElement.FontSizeProperty, ns);
+        }
+        else if (sel.Start.Paragraph is Paragraph p)
+        {
+            p.FontSize = ns;
+            foreach (var inl in p.Inlines.ToList())
+                inl.ClearValue(TextElement.FontSizeProperty);
+        }
+
+        _current.CategorySizes[cat] = ns;
+        ScheduleSave();
+    }
+
+    private double SizeFor(string cat)
+    {
+        if (_current != null && _current.CategorySizes.TryGetValue(cat, out var s))
+            return s;
+        return DefaultSizes.TryGetValue(cat, out var def) ? def : 14;
+    }
+
+    private string CaretCategory()
+    {
+        var p = Editor.Selection.Start.Paragraph;
+        if (p == null || p.Parent is ListItem)
+            return "Normal";
+        return p.Tag as string ?? "Normal";
+    }
+
+    // ============================================================
+    // Text color
+    // ============================================================
+
+    private void Color_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current == null)
+            return;
+
+        using var dlg = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true };
+        if (Editor.Selection.GetPropertyValue(TextElement.ForegroundProperty) is SolidColorBrush b)
+            dlg.Color = System.Drawing.Color.FromArgb(b.Color.A, b.Color.R, b.Color.G, b.Color.B);
+
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            var c = dlg.Color;
+            var brush = new SolidColorBrush(Color.FromArgb(c.A, c.R, c.G, c.B));
+            Editor.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+            Editor.Focus();
+            ScheduleSave();
+        }
+    }
+
+    private void ClearColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current == null)
+            return;
+        foreach (var inl in InlinesInSelection())
+            inl.ClearValue(TextElement.ForegroundProperty);
+        Editor.Focus();
+        ScheduleSave();
+    }
+
+    // ============================================================
+    // Alignment + indentation
+    // ============================================================
+
+    private void AlignButton_Click(object sender, RoutedEventArgs e) => AlignPopup.IsOpen = true;
+
+    private void Align_Selected(object sender, RoutedEventArgs e)
+    {
+        AlignPopup.IsOpen = false;
+        Editor.Focus();
+        switch ((string)((Button)sender).Tag)
+        {
+            case "Center": EditingCommands.AlignCenter.Execute(null, Editor); break;
+            case "Right": EditingCommands.AlignRight.Execute(null, Editor); break;
+            case "Justify": EditingCommands.AlignJustify.Execute(null, Editor); break;
+            default: EditingCommands.AlignLeft.Execute(null, Editor); break;
+        }
+        UpdateAlignIcon();
+        ScheduleSave();
+    }
+
+    private void Indent_Click(object sender, RoutedEventArgs e)
+    { EditingCommands.IncreaseIndentation.Execute(null, Editor); Editor.Focus(); ScheduleSave(); }
+
+    private void Outdent_Click(object sender, RoutedEventArgs e)
+    { EditingCommands.DecreaseIndentation.Execute(null, Editor); Editor.Focus(); ScheduleSave(); }
+
+    // ============================================================
+    // Theme toggle
+    // ============================================================
+
+    private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        ThemeManager.Toggle();
+        UpdateThemeGlyph();
+        RefreshCheckedItemColors();
+        _settings.Theme = ThemeManager.Current.ToString();
+        _settings.Save();
+    }
+
+    private void UpdateThemeGlyph()
+    {
+        // Show the icon of the mode you'd switch TO.
+        ThemeToggleButton.Content = ThemeManager.Current == AppTheme.Dark ? "" : "";
+    }
+
+    // ============================================================
+    // Toolbar state sync
+    // ============================================================
+
     private void Editor_SelectionChanged(object sender, RoutedEventArgs e)
     {
         _syncing = true;
         try
         {
             object weight = Editor.Selection.GetPropertyValue(TextElement.FontWeightProperty);
-            BoldBtn.IsChecked = weight is FontWeight fw && fw == FontWeights.Bold;
+            var caretCat = CaretCategory();
+            // Headings are bold at the paragraph level; don't force the Bold toggle on for them.
+            bool headingBold = caretCat is "H1" or "H2" or "H3";
+            BoldBtn.IsChecked = !headingBold && weight is FontWeight fw && fw == FontWeights.Bold;
 
             object style = Editor.Selection.GetPropertyValue(TextElement.FontStyleProperty);
             ItalicBtn.IsChecked = style is FontStyle fs && fs == FontStyles.Italic;
@@ -354,26 +622,103 @@ public partial class MainWindow : Window
             StrikeBtn.IsChecked = deco != null &&
                 deco.Any(d => d.Location == TextDecorationLocation.Strikethrough);
 
-            object sizeVal = Editor.Selection.GetPropertyValue(TextElement.FontSizeProperty);
-            if (sizeVal is double d)
-                FontSizeCombo.Text = ((int)Math.Round(d)).ToString();
-
-            object famVal = Editor.Selection.GetPropertyValue(TextElement.FontFamilyProperty);
-            if (famVal is FontFamily family)
-            {
-                foreach (var obj in FontFamilyCombo.Items)
-                    if (obj is ComboBoxItem ci && ci.Content is string name &&
-                        name.Equals(family.Source, StringComparison.OrdinalIgnoreCase))
-                    {
-                        FontFamilyCombo.SelectedItem = ci;
-                        break;
-                    }
-            }
+            UpdateFormatIcon();
+            UpdateAlignIcon();
         }
         finally
         {
             _syncing = false;
         }
+    }
+
+    private void UpdateFormatIcon()
+    {
+        var p = Editor.Selection.Start.Paragraph;
+        string cat = "Normal";
+        if (p != null)
+        {
+            if (p.Parent is ListItem li && li.Parent is List list)
+                cat = list.MarkerStyle == TextMarkerStyle.Decimal ? "Numbered" : "Bulleted";
+            else
+                cat = p.Tag as string ?? "Normal";
+        }
+        SetFormatIcon(cat);
+    }
+
+    private void SetFormatIcon(string cat)
+    {
+        var mdl2 = new FontFamily("Segoe MDL2 Assets");
+        switch (cat)
+        {
+            case "H1": case "H2": case "H3":
+                FormatIcon.FontFamily = new FontFamily("Segoe UI");
+                FormatIcon.FontWeight = FontWeights.Bold;
+                FormatIcon.Text = cat;
+                break;
+            case "Bulleted":
+                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
+                FormatIcon.Text = ""; break;
+            case "Numbered":
+                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
+                FormatIcon.Text = ""; break;
+            case "Check":
+                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
+                FormatIcon.Text = ""; break;
+            default:
+                FormatIcon.FontFamily = mdl2; FormatIcon.FontWeight = FontWeights.Normal;
+                FormatIcon.Text = ""; break;
+        }
+    }
+
+    private void UpdateAlignIcon()
+    {
+        var ta = Editor.Selection.Start.Paragraph?.TextAlignment ?? TextAlignment.Left;
+        AlignIcon.Text = ta switch
+        {
+            TextAlignment.Center => "",
+            TextAlignment.Right => "",
+            TextAlignment.Justify => "",
+            _ => ""
+        };
+    }
+
+    // ============================================================
+    // Document helpers
+    // ============================================================
+
+    private IEnumerable<Paragraph> AllParagraphs() => Flatten(Editor.Document.Blocks);
+
+    private static IEnumerable<Paragraph> Flatten(BlockCollection blocks)
+    {
+        foreach (var b in blocks)
+        {
+            if (b is Paragraph p)
+                yield return p;
+            else if (b is List list)
+                foreach (var li in list.ListItems)
+                    foreach (var pp in Flatten(li.Blocks))
+                        yield return pp;
+            else if (b is Section s)
+                foreach (var pp in Flatten(s.Blocks))
+                    yield return pp;
+        }
+    }
+
+    private IEnumerable<Paragraph> ParagraphsInSelection()
+    {
+        var sel = Editor.Selection;
+        foreach (var p in AllParagraphs())
+            if (p.ContentStart.CompareTo(sel.End) <= 0 && p.ContentEnd.CompareTo(sel.Start) >= 0)
+                yield return p;
+    }
+
+    private IEnumerable<Inline> InlinesInSelection()
+    {
+        var sel = Editor.Selection;
+        foreach (var p in ParagraphsInSelection().ToList())
+            foreach (var inl in p.Inlines.ToList())
+                if (inl.ContentStart.CompareTo(sel.End) <= 0 && inl.ContentEnd.CompareTo(sel.Start) >= 0)
+                    yield return inl;
     }
 
     // ============================================================
@@ -388,36 +733,28 @@ public partial class MainWindow : Window
         try
         {
             UpdateInfo? info = await Updater.CheckAsync();
-
             if (info == null)
             {
-                MessageBox.Show(this,
-                    "Couldn't determine the latest version. Please try again later.",
+                MessageBox.Show(this, "Couldn't determine the latest version. Please try again later.",
                     "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (!Updater.IsNewer(info.Version))
             {
-                MessageBox.Show(this,
-                    $"You're up to date (v{Updater.CurrentVersion.ToString(3)}).",
+                MessageBox.Show(this, $"You're up to date (v{Updater.CurrentVersion.ToString(3)}).",
                     "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
-            // A newer release exists but has no installer attached: send the
-            // user to the downloads page instead.
             if (string.IsNullOrEmpty(info.DownloadUrl))
             {
                 var open = MessageBox.Show(this,
-                    $"Version {info.Tag} is available, but no installer was found on the " +
-                    "release. Open the downloads page?",
+                    $"Version {info.Tag} is available, but no installer was found on the release. " +
+                    "Open the downloads page?",
                     "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
                 if (open == MessageBoxResult.Yes)
                     Updater.OpenReleasesPage();
                 return;
             }
-
             var choice = MessageBox.Show(this,
                 $"Version {info.Tag} is available (you have v{Updater.CurrentVersion.ToString(3)}).\n\n" +
                 "Download and install it now? The app will close to finish updating.",
@@ -426,14 +763,13 @@ public partial class MainWindow : Window
                 return;
 
             UpdateButton.Content = "Downloading…";
-            PersistCurrent();                       // save notes before we exit
+            PersistCurrent();
             string installer = await Updater.DownloadInstallerAsync(info.DownloadUrl);
-            Updater.RunInstallerAndExit(installer); // closes the app
+            Updater.RunInstallerAndExit(installer);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this,
-                "Update check failed:\n" + ex.Message,
+            MessageBox.Show(this, "Update check failed:\n" + ex.Message,
                 "Check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
@@ -451,21 +787,21 @@ public partial class MainWindow : Window
     {
         var note = new Note
         {
-            Title = "Welcome to Simple Notes",
+            Title = "Welcome to Purple Star Notes",
             Tags = new List<string> { "Getting Started" },
             Modified = DateTime.Now
         };
 
         var doc = new FlowDocument();
-        doc.Blocks.Add(new Paragraph(new Run(
-            "This is your first note. A few things to try:")));
+        doc.Blocks.Add(new Paragraph(new Run("This is your first note. A few things to try:")));
 
-        var list = new System.Windows.Documents.List(); // bulleted list
+        var list = new System.Windows.Documents.List();
         foreach (var line in new[]
         {
             "Click the + button (top-left) to create a new note.",
-            "Give a note a title above, and add tags like Games/EU4.",
-            "Select text and use the toolbar for bold, italics, and font size.",
+            "Use the Formatting menu for headings, lists, and check lists.",
+            "Select text, then use B / I / U, the − / + size buttons, or the color button.",
+            "Toggle light and dark mode from the bottom-left.",
             "Everything is saved automatically as you type."
         })
         {

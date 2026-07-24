@@ -3,17 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
-namespace SimpleNotes;
+namespace PurpleStarNotes;
 
 /// <summary>
 /// Loads and saves notes to a JSON file under the user's AppData folder:
-///   %AppData%\SimpleNotes\notes.json
+///   %AppData%\PurpleStarNotes\notes.json
 /// </summary>
 public static class NoteStore
 {
     public static string Folder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "SimpleNotes");
+        "PurpleStarNotes");
 
     private static string FilePath => Path.Combine(Folder, "notes.json");
 

@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace SimpleNotes;
+namespace PurpleStarNotes;
 
 /// <summary>Details of the latest published release on GitHub.</summary>
 public record UpdateInfo(Version Version, string Tag, string DownloadUrl, string Notes);
@@ -16,7 +16,7 @@ public record UpdateInfo(Version Version, string Tag, string DownloadUrl, string
 /// downloads and launches the installer.
 ///
 /// The "repository to update" bridge is a GitHub *Release*: you publish a
-/// release whose tag is vX.Y.Z with the installer (SimpleNotesSetup.exe)
+/// release whose tag is vX.Y.Z with the installer (PurpleStarNotesSetup.exe)
 /// attached as an asset. This class reads the repo's latest release, compares
 /// its version to the running app, and runs the installer to update in place.
 ///
@@ -80,7 +80,7 @@ public static class Updater
     {
         using var http = NewClient(TimeSpan.FromMinutes(5));
         byte[] bytes = await http.GetByteArrayAsync(url);
-        string path = Path.Combine(Path.GetTempPath(), "SimpleNotesSetup.exe");
+        string path = Path.Combine(Path.GetTempPath(), "PurpleStarNotesSetup.exe");
         await File.WriteAllBytesAsync(path, bytes);
         return path;
     }
@@ -99,7 +99,7 @@ public static class Updater
     {
         var http = new HttpClient { Timeout = timeout };
         // GitHub's API requires a User-Agent header.
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("SimpleNotes-Updater");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("PurpleStarNotes-Updater");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return http;
     }
@@ -110,8 +110,7 @@ public static class Updater
         return Version.TryParse(tag, out var v) ? v : null;
     }
 
-    // Compare on major.minor.build only (ignore the 4th/revision field and
-    // treat unspecified fields as 0) so "1.2" and "1.2.0.0" compare equal.
+    // Compare on major.minor.build only.
     private static Version Normalize(Version v)
         => new Version(v.Major, v.Minor, Math.Max(0, v.Build));
 }

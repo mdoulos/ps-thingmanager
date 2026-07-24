@@ -12,7 +12,7 @@ on:
       version:
         description: 'Version to release, e.g. 1.0.0 (publishes a Release tagged v<version>)'
         required: true
-        default: '1.0.0'
+        default: '1.1.0'
 
 permissions:
   contents: write   # needed to create the Release and its tag
@@ -42,7 +42,7 @@ jobs:
 
       - name: Publish (self-contained, no .NET needed on user PCs)
         run: >
-          dotnet publish src/SimpleNotes.csproj
+          dotnet publish src/PurpleStarNotes.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=false
           -p:Version=${{ steps.ver.outputs.version }}
@@ -56,13 +56,13 @@ jobs:
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             "/DMyAppVersion=${{ steps.ver.outputs.version }}" `
-            installer\SimpleNotes.iss
+            installer\PurpleStarNotes.iss
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SimpleNotesSetup
-          path: installer/Output/SimpleNotesSetup.exe
+          name: PurpleStarNotesSetup
+          path: installer/Output/PurpleStarNotesSetup.exe
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -71,5 +71,5 @@ jobs:
           # Creates this tag at the built commit if it doesn't already exist.
           tag_name: v${{ steps.ver.outputs.version }}
           name: v${{ steps.ver.outputs.version }}
-          files: installer/Output/SimpleNotesSetup.exe
+          files: installer/Output/PurpleStarNotesSetup.exe
           generate_release_notes: true
