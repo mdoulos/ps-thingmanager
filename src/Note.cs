@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
@@ -12,6 +13,13 @@ namespace PurpleStarNotes;
 /// </summary>
 public class Note : INotifyPropertyChanged
 {
+    /// <summary>
+    /// Reserved tag that marks a note as an internal changelog entry. Notes with
+    /// this tag are hidden from the normal note list and tag filter; they are only
+    /// reachable through the Changelog menu. The tag itself is never shown.
+    /// </summary>
+    public const string ChangelogTag = "Internal PS Changelog";
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
     private string _title = "Untitled Note";
@@ -81,6 +89,15 @@ public class Note : INotifyPropertyChanged
 
     [JsonIgnore]
     public string ModifiedDisplay => "Modified " + Modified.ToString("dddd, MMM d, yyyy, hh:mm tt");
+
+    /// <summary>True when this note is an internal changelog entry.</summary>
+    [JsonIgnore]
+    public bool IsChangelog =>
+        Tags != null && Tags.Any(t => t.Equals(ChangelogTag, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Convenience inverse of <see cref="IsChangelog"/> for XAML binding.</summary>
+    [JsonIgnore]
+    public bool IsRegularNote => !IsChangelog;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)
