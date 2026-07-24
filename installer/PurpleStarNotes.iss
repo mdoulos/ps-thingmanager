@@ -8,7 +8,7 @@
 ; Because the AppId is stable, re-running a newer installer upgrades in place.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.3"
+  #define MyAppVersion "1.1.4"
 #endif
 
 #define MyAppName "Purple Star Notes"
@@ -53,3 +53,22 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// When the app is already installed, this run is an upgrade: don't prompt for
+// the install folder or the desktop-shortcut task again. Inno remembers the
+// previous task choice (UsePreviousTasks) and reapplies it automatically.
+function IsUpgrade: Boolean;
+var
+  S: String;
+  Key: String;
+begin
+  Key := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E1D4C3-6A5F-4B8E-9D21-7C3E2F1A4B5D}_is1';
+  Result := RegQueryStringValue(HKCU, Key, 'UninstallString', S)
+         or RegQueryStringValue(HKLM, Key, 'UninstallString', S);
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := IsUpgrade and ((PageID = wpSelectDir) or (PageID = wpSelectTasks));
+end;

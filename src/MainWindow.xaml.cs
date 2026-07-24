@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _saveTimer;
     private bool _syncing;
     private string _search = "";
+    private string _tagFilter = "";
     private readonly AppSettings _settings;
 
     // Default font size for each paragraph category (overridable per note).
@@ -72,7 +73,12 @@ public partial class MainWindow : Window
 
     private void RefreshList()
     {
+        UpdateTagButtonVisibility();
+
         IEnumerable<Note> view = _notes.OrderByDescending(n => n.Modified);
+
+        if (!string.IsNullOrEmpty(_tagFilter))
+            view = view.Where(n => n.Tags.Any(t => t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)));
 
         if (!string.IsNullOrWhiteSpace(_search))
         {
@@ -230,11 +236,71 @@ public partial class MainWindow : Window
             DeleteNote(note);
     }
 
-    private void SortButton_Click(object sender, RoutedEventArgs e) => RefreshList();
-
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _search = SearchBox.Text;
+        RefreshList();
+    }
+
+    // ---- Filter the note list by tag ----
+
+    private IEnumerable<string> AllTags() =>
+        _notes.SelectMany(n => n.Tags)
+              .Distinct(StringComparer.OrdinalIgnoreCase)
+              .OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
+
+    // The Tags button only appears once at least one tag exists; a stale filter
+    // (its tag was removed) is cleared.
+    private void UpdateTagButtonVisibility()
+    {
+        bool any = AllTags().Any();
+        TagsHeaderButton.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        if (!string.IsNullOrEmpty(_tagFilter) &&
+            !AllTags().Any(t => t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)))
+            _tagFilter = "";
+    }
+
+    private void TagsHeaderButton_Click(object sender, RoutedEventArgs e)
+    {
+        BuildTagFilterMenu();
+        TagFilterPopup.IsOpen = true;
+    }
+
+    private void BuildTagFilterMenu()
+    {
+        TagFilterPanel.Children.Clear();
+        TagFilterPanel.Children.Add(MakeFilterRow("All notes", "", string.IsNullOrEmpty(_tagFilter)));
+        foreach (var t in AllTags())
+            TagFilterPanel.Children.Add(
+                MakeFilterRow(t, t, t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private Button MakeFilterRow(string label, string value, bool selected)
+    {
+        var b = new Button { Style = (Style)FindResource("MenuRowButton"), Tag = value };
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        var icon = new TextBlock
+        {
+            Text = value == "" ? "\uE8FD" : "\uE8EC",   // all-notes (list) / tag glyph
+            FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
+            Width = 24, VerticalAlignment = VerticalAlignment.Center
+        };
+        icon.SetResourceReference(TextBlock.ForegroundProperty,
+            value == "" ? "TextSecondaryBrush" : "AccentBrush");
+        var txt = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        sp.Children.Add(icon);
+        sp.Children.Add(txt);
+        b.Content = sp;
+        if (selected)
+            b.Background = (Brush)FindResource("AccentSoftBrush");
+        b.Click += TagFilter_Selected;
+        return b;
+    }
+
+    private void TagFilter_Selected(object sender, RoutedEventArgs e)
+    {
+        _tagFilter = (string)((Button)sender).Tag;
+        TagFilterPopup.IsOpen = false;
         RefreshList();
     }
 
@@ -267,6 +333,8 @@ public partial class MainWindow : Window
             _currentTags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             return;
         _currentTags.Add(tag);
+        _current.Tags = _currentTags.ToList();
+        UpdateTagButtonVisibility();
         ScheduleSave();
     }
 
@@ -275,6 +343,9 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement fe && fe.DataContext is string tag)
         {
             _currentTags.Remove(tag);
+            if (_current != null)
+                _current.Tags = _currentTags.ToList();
+            UpdateTagButtonVisibility();
             ScheduleSave();
         }
     }
@@ -452,9 +523,15 @@ public partial class MainWindow : Window
     // Render the box glyphs from one symbol font with text (not emoji) presentation
     // so the empty and checked boxes are the same size.
     private static readonly FontFamily CheckFont = new FontFamily("Segoe UI Symbol");
-    private static string GlyphText(bool done) => (done ? BoxDone : BoxEmpty) + "︎  ";
-    private static Run NewGlyphRun(bool done) =>
-        new Run(GlyphText(done)) { Foreground = new SolidColorBrush(AccentColor), FontFamily = CheckFont };
+    private const double CheckGlyphSize = 26;   // ~2x the body text
+    private static string GlyphText(bool done) => (done ? BoxDone : BoxEmpty) + "︎ ";
+    private static Run NewGlyphRun(bool done) => new Run(GlyphText(done))
+    {
+        Foreground = new SolidColorBrush(AccentColor),
+        FontFamily = CheckFont,
+        FontSize = CheckGlyphSize,
+        BaselineAlignment = BaselineAlignment.Center
+    };
 
     private static bool IsCheck(Paragraph p)
     {
@@ -501,16 +578,36 @@ public partial class MainWindow : Window
     }
 
     // Clicking the box glyph toggles the item (crosses out / restores the text).
+    // Returns the check paragraph whose box glyph is under the point, or null.
+    // Only the box glyph itself counts (not the gap or the text after it).
+    private Paragraph? CheckboxHit(Point pt)
+    {
+        var tp = Editor.GetPositionFromPoint(pt, true);
+        if (tp?.Paragraph is Paragraph p && IsCheck(p) &&
+            p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
+        {
+            Rect box = r.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            if (pt.X >= box.Left - 2 && pt.X <= box.Right + 3 &&
+                pt.Y >= box.Top && pt.Y <= box.Bottom)
+                return p;
+        }
+        return null;
+    }
+
     private void Editor_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        var tp = Editor.GetPositionFromPoint(e.GetPosition(Editor), true);
-        if (tp?.Paragraph is Paragraph p && IsCheck(p) &&
-            p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text) &&
-            tp.CompareTo(r.ContentEnd) <= 0)
+        var p = CheckboxHit(e.GetPosition(Editor));
+        if (p != null)
         {
             ToggleCheckParagraph(p);
             e.Handled = true;
         }
+    }
+
+    // Show a hand cursor when hovering over a checkbox glyph.
+    private void Editor_MouseMove(object sender, MouseEventArgs e)
+    {
+        Editor.Cursor = CheckboxHit(e.GetPosition(Editor)) != null ? Cursors.Hand : Cursors.IBeam;
     }
 
     private void ToggleCheckParagraph(Paragraph p)
@@ -524,6 +621,8 @@ public partial class MainWindow : Window
         {
             glyph.Text = GlyphText(ns);
             glyph.FontFamily = CheckFont;
+            glyph.FontSize = CheckGlyphSize;
+            glyph.BaselineAlignment = BaselineAlignment.Center;
         }
 
         foreach (var inl in p.Inlines.ToList())
@@ -564,6 +663,8 @@ public partial class MainWindow : Window
                 r.Text = GlyphText(done);
                 r.Foreground = new SolidColorBrush(AccentColor);
                 r.FontFamily = CheckFont;
+                r.FontSize = CheckGlyphSize;
+                r.BaselineAlignment = BaselineAlignment.Center;
             }
             else
             {
@@ -840,28 +941,31 @@ public partial class MainWindow : Window
     // three short lines, each with a number on the left.
     private static UIElement MakeNumberedIcon(double size)
     {
-        var vb = new Viewbox { Width = size + 2, Height = size + 2, VerticalAlignment = VerticalAlignment.Center };
-        var col = new StackPanel();
-        for (int i = 1; i <= 3; i++)
+        var vb = new Viewbox
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 1.6) };
+            Width = size, Height = size, Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center
+        };
+        var canvas = new Canvas { Width = 16, Height = 16 };
+        double[] ys = { 3.0, 8.0, 13.0 };
+        for (int i = 0; i < 3; i++)
+        {
             var num = new TextBlock
             {
-                Text = i.ToString(), FontSize = 5.5, Width = 6,
-                TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+                Text = (i + 1).ToString(), FontSize = 7, FontWeight = FontWeights.SemiBold,
+                Width = 6, TextAlignment = TextAlignment.Center
             };
-            var line = new Border
-            {
-                Width = 11, Height = 2, CornerRadius = new CornerRadius(1),
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(1.5, 0, 0, 0)
-            };
+            Canvas.SetLeft(num, 0);
+            Canvas.SetTop(num, ys[i] - 5);
+            var line = new System.Windows.Shapes.Rectangle { Width = 8, Height = 2, RadiusX = 1, RadiusY = 1 };
+            Canvas.SetLeft(line, 7.5);
+            Canvas.SetTop(line, ys[i] - 1);
             num.SetBinding(TextBlock.ForegroundProperty, FollowButtonForeground());
-            line.SetBinding(Border.BackgroundProperty, FollowButtonForeground());
-            row.Children.Add(num);
-            row.Children.Add(line);
-            col.Children.Add(row);
+            line.SetBinding(System.Windows.Shapes.Shape.FillProperty, FollowButtonForeground());
+            canvas.Children.Add(num);
+            canvas.Children.Add(line);
         }
-        vb.Child = col;
+        vb.Child = canvas;
         return vb;
     }
 
