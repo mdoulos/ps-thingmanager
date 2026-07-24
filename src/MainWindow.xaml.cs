@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool _syncing;
     private string _search = "";
     private string _tagFilter = "";
+    private bool _changelogMode;
     private readonly AppSettings _settings;
 
     // Default font size for each paragraph category (overridable per note).
@@ -65,10 +66,16 @@ public partial class MainWindow : Window
         foreach (var n in loaded.OrderByDescending(n => n.Modified))
             _notes.Add(n);
 
+        EnsureChangelogNotes();
+
         RefreshList();
 
-        if (_notes.Count > 0)
-            NotesList.SelectedItem = _notes[0];
+        // Never open a changelog entry on startup; pick the newest regular note.
+        var firstRegular = _notes.Where(n => !n.IsChangelog)
+                                 .OrderByDescending(n => n.Modified)
+                                 .FirstOrDefault();
+        if (firstRegular != null)
+            NotesList.SelectedItem = firstRegular;
     }
 
     private void RefreshList()
@@ -80,8 +87,18 @@ public partial class MainWindow : Window
 
         IEnumerable<Note> view = _notes.OrderByDescending(n => n.Modified);
 
-        if (!string.IsNullOrEmpty(_tagFilter))
-            view = view.Where(n => n.Tags.Any(t => t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)));
+        if (_changelogMode)
+        {
+            // Changelog view: only the internal changelog entries.
+            view = view.Where(n => n.IsChangelog);
+        }
+        else
+        {
+            // Normal view: changelog entries are hidden and reachable only via the menu.
+            view = view.Where(n => !n.IsChangelog);
+            if (!string.IsNullOrEmpty(_tagFilter))
+                view = view.Where(n => n.Tags.Any(t => t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)));
+        }
 
         if (!string.IsNullOrWhiteSpace(_search))
         {
@@ -118,11 +135,31 @@ public partial class MainWindow : Window
 
         _currentTags.Clear();
         foreach (var t in note.Tags)
-            _currentTags.Add(t);
+            if (!t.Equals(Note.ChangelogTag, StringComparison.OrdinalIgnoreCase))
+                _currentTags.Add(t);   // the changelog tag stays hidden even here
+
+        UpdateEditorChrome(note);
 
         _syncing = false;
         UpdateFormatIcon();
         UpdateAlignIcon();
+    }
+
+    // Changelog entries show an "Exit Changelog" button instead of the
+    // description/delete actions in the top-right of the editor.
+    private void UpdateEditorChrome(Note note)
+    {
+        bool cl = note.IsChangelog;
+        SnippetButton.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
+        DeleteButton.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
+        ExitChangelogButton.Visibility = cl ? Visibility.Visible : Visibility.Collapsed;
+
+        // Changelog entries are read-only; regular notes stay editable. Hide the
+        // tag editor and formatting toolbar for a clean, view-only changelog.
+        Editor.IsReadOnly = cl;
+        TitleBox.IsReadOnly = cl;
+        TagsRow.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
+        FormatToolbar.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void TitleBox_TextChanged(object sender, TextChangedEventArgs e) => ScheduleSave();
@@ -138,7 +175,9 @@ public partial class MainWindow : Window
 
     private void PersistCurrent()
     {
-        if (_current == null)
+        // Changelog entries are view-only: never overwrite their content or bump
+        // their date (which would scramble the version ordering).
+        if (_current == null || _current.IsChangelog)
             return;
 
         _current.Title = TitleBox.Text;
@@ -172,6 +211,7 @@ public partial class MainWindow : Window
         PersistCurrent();
         var note = new Note { Title = "" };
         _notes.Add(note);
+        _changelogMode = false;   // leave the changelog when creating a note
         _search = "";
         SearchBox.Text = "";
         RefreshList();
@@ -197,12 +237,17 @@ public partial class MainWindow : Window
             _current = null;
         _notes.Remove(note);
 
-        if (_notes.Count == 0)
+        // Keep at least one regular note around (changelog entries don't count).
+        if (!_notes.Any(n => !n.IsChangelog))
             _notes.Add(new Note { Title = "" });
 
         NoteStore.Save(_notes);
         RefreshList();
-        NotesList.SelectedItem = _notes.OrderByDescending(n => n.Modified).First();
+        var next = _notes.Where(n => !n.IsChangelog)
+                         .OrderByDescending(n => n.Modified)
+                         .FirstOrDefault();
+        if (next != null)
+            NotesList.SelectedItem = next;
     }
 
     // ---- Right-click context menu on note list items ----
@@ -249,14 +294,18 @@ public partial class MainWindow : Window
 
     private IEnumerable<string> AllTags() =>
         _notes.SelectMany(n => n.Tags)
+              .Where(t => !t.Equals(Note.ChangelogTag, StringComparison.OrdinalIgnoreCase))
               .Distinct(StringComparer.OrdinalIgnoreCase)
               .OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
 
-    // Tags to show on a note in the sidebar: all of them, minus the active filter.
+    // Tags to show on a note in the sidebar: all of them, minus the hidden
+    // changelog tag and the active filter tag.
     private List<string> VisibleTagsFor(Note n) =>
-        string.IsNullOrEmpty(_tagFilter)
-            ? n.Tags.ToList()
-            : n.Tags.Where(t => !t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+        n.Tags.Where(t =>
+                !t.Equals(Note.ChangelogTag, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrEmpty(_tagFilter) ||
+                 !t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)))
+              .ToList();
 
     // The Tags button only appears once at least one tag exists; a stale filter
     // (its tag was removed) is cleared.
@@ -311,6 +360,49 @@ public partial class MainWindow : Window
         _tagFilter = (string)((Button)sender).Tag;
         TagFilterPopup.IsOpen = false;
         RefreshList();
+    }
+
+    // ============================================================
+    // Hamburger menu / changelog
+    // ============================================================
+
+    private void MenuButton_Click(object sender, RoutedEventArgs e) => MenuPopup.IsOpen = true;
+
+    private void ChangelogMenu_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        EnterChangelog();
+    }
+
+    // Show only the internal changelog entries and open the newest one.
+    private void EnterChangelog()
+    {
+        PersistCurrent();
+        _changelogMode = true;
+        _tagFilter = "";
+        _search = "";
+        SearchBox.Text = "";
+        RefreshList();
+
+        if (NotesList.Items.Count > 0)
+            NotesList.SelectedItem = NotesList.Items[0];
+    }
+
+    private void ExitChangelog_Click(object sender, RoutedEventArgs e) => ExitChangelog();
+    private void CtxExitChangelog_Click(object sender, RoutedEventArgs e) => ExitChangelog();
+
+    // Leave the changelog and return to the normal note list.
+    private void ExitChangelog()
+    {
+        PersistCurrent();
+        _changelogMode = false;
+        RefreshList();
+
+        var firstRegular = _notes.Where(n => !n.IsChangelog)
+                                 .OrderByDescending(n => n.Modified)
+                                 .FirstOrDefault();
+        if (firstRegular != null)
+            NotesList.SelectedItem = firstRegular;
     }
 
     // ============================================================
@@ -641,7 +733,9 @@ public partial class MainWindow : Window
             double right = c.Left;
             if (right - left < 6)           // measurement failed: assume a square box
                 right = left + a.Height;
-            if (pt.X >= left - 3 && pt.X <= right + 4 && pt.Y >= a.Top - 2 && pt.Y <= a.Bottom + 2)
+            // Keep the hit region tight to the box itself so it doesn't spill into
+            // the gap/text to its right (only a hair of slack on each edge).
+            if (pt.X >= left - 2 && pt.X <= right && pt.Y >= a.Top - 2 && pt.Y <= a.Bottom + 2)
                 return p;
         }
         return null;
@@ -1195,6 +1289,137 @@ public partial class MainWindow : Window
     // ============================================================
     // Seed content
     // ============================================================
+
+    // Internal changelog entries: one note per version, titled with the version.
+    // Added on first launch (and any new versions on later launches); matched by
+    // title so they are never duplicated.
+    private void EnsureChangelogNotes()
+    {
+        var existing = new HashSet<string>(
+            _notes.Where(n => n.IsChangelog).Select(n => n.Title),
+            StringComparer.OrdinalIgnoreCase);
+
+        bool added = false;
+        foreach (var entry in ChangelogEntries())
+            if (!existing.Contains(entry.Title))
+            {
+                _notes.Add(entry);
+                added = true;
+            }
+
+        if (added)
+            NoteStore.Save(_notes);
+    }
+
+    // The changelog is authored in /CHANGELOG.md (embedded as a resource) and
+    // parsed into one note per version, so adding a release is a docs-only change.
+    private static IEnumerable<Note> ChangelogEntries()
+    {
+        // The "Unreleased" section holds pending notes that CI has not stamped
+        // with a version yet, so it isn't shown as a changelog entry.
+        var parsed = ParseChangelog(LoadChangelogMarkdown())
+            .Where(e => !e.Version.Equals("Unreleased", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Break same-date ties by file order (top of the file = newest) so the
+        // list matches the file even when several versions share a date.
+        var notes = new List<Note>();
+        for (int i = 0; i < parsed.Count; i++)
+            notes.Add(MakeChangelogNote(
+                parsed[i].Version,
+                parsed[i].Date.AddSeconds(parsed.Count - i),
+                parsed[i].Lines.ToArray()));
+        return notes;
+    }
+
+    private static string LoadChangelogMarkdown()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("CHANGELOG.md");
+            if (stream == null)
+                return "";
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch
+        {
+            return "";   // never let a missing/unreadable changelog break startup
+        }
+    }
+
+    // Parse a Keep-a-Changelog-style file: "## <version> — <yyyy-MM-dd>" headers
+    // (em dash or hyphen; date optional) followed by "-"/"*" bullet lines.
+    private static List<(string Version, DateTime Date, List<string> Lines)> ParseChangelog(string md)
+    {
+        var result = new List<(string, DateTime, List<string>)>();
+        if (string.IsNullOrWhiteSpace(md))
+            return result;
+
+        string? version = null;
+        DateTime date = DateTime.Today;
+        List<string>? lines = null;
+
+        void Flush()
+        {
+            if (version != null && lines is { Count: > 0 })
+                result.Add((version, date, lines));
+        }
+
+        foreach (var raw in md.Replace("\r\n", "\n").Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.StartsWith("## "))
+            {
+                Flush();
+                lines = new List<string>();
+                date = DateTime.Today;
+
+                string header = line.Substring(3).Trim();
+                int sep = header.IndexOf('—');   // em dash
+                if (sep < 0) sep = header.IndexOf('-');
+                if (sep >= 0)
+                {
+                    version = header.Substring(0, sep).Trim();
+                    string datePart = header.Substring(sep + 1).Trim();
+                    if (DateTime.TryParse(datePart, System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out var d))
+                        date = d;
+                }
+                else
+                {
+                    version = header;
+                }
+            }
+            else if (lines != null && (line.StartsWith("- ") || line.StartsWith("* ")))
+            {
+                lines.Add(line.Substring(2).Trim());
+            }
+        }
+        Flush();
+        return result;
+    }
+
+    private static Note MakeChangelogNote(string title, DateTime date, string[] lines)
+    {
+        var note = new Note
+        {
+            Title = title,
+            Tags = new List<string> { Note.ChangelogTag },
+            Modified = date
+        };
+
+        var doc = new FlowDocument();
+        var list = new System.Windows.Documents.List();
+        foreach (var line in lines)
+            list.ListItems.Add(new ListItem(new Paragraph(new Run(line))));
+        doc.Blocks.Add(list);
+
+        note.ContentXaml = XamlWriter.Save(doc);
+        note.Preview = string.Join(" ", lines);
+        return note;
+    }
 
     private static Note CreateWelcomeNote()
     {

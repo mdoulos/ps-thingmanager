@@ -4,6 +4,9 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
 
+        <!-- Shared converter for showing/hiding elements from a bool. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
         <!-- ===================== Themed brushes (dark defaults) =====================
              These are replaced at runtime by ThemeManager, so everything that
              references them uses DynamicResource. -->

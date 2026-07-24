@@ -14,7 +14,7 @@
     <!-- Icon shown on the .exe in Explorer, on shortcuts, and the taskbar -->
     <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- Bump this for each release; the tag you push (vX.Y.Z) should match. -->
-    <Version>1.1.6</Version>
+    <Version>1.1.7</Version>
     <Company>mdoulos</Company>
     <Product>Purple Star Notes</Product>
   </PropertyGroup>
@@ -22,6 +22,9 @@
   <ItemGroup>
     <!-- Same icon, embedded as a resource so the running window can use it too -->
     <Resource Include="app.ico" />
+    <!-- Source of truth for the in-app changelog; embedded so the running app can
+         read it regardless of where it is installed. -->
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
   </ItemGroup>
 
 </Project>
