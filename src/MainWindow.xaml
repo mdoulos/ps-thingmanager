@@ -32,7 +32,7 @@
 
                 <!-- Header: "Notes" + sort + add -->
                 <Grid Grid.Row="0" Margin="18,16,14,6">
-                    <TextBlock Text="Notes"
+                    <TextBlock x:Name="SidebarTitle" Text="Notes"
                                Foreground="{DynamicResource TextPrimaryBrush}"
                                FontSize="20" FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
@@ -96,7 +96,7 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}"
                                            FontSize="12.5" Margin="0,4,0,0"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding ModifiedDisplay}"
+                                <TextBlock Text="{Binding DateLabelDisplay}"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="11" Margin="0,7,0,0"
                                            TextTrimming="CharacterEllipsis"/>
@@ -140,13 +140,18 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button x:Name="UpdateButton" Style="{StaticResource LinkButton}"
                                     Content="Check for Updates" Margin="4,0,4,0"
-                                    Click="UpdateButton_Click"/>
+                                    Click="UpdateButton_Click"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Button.RenderTransform><TranslateTransform Y="-2"/></Button.RenderTransform>
+                            </Button>
                             <Button x:Name="ThemeToggleButton" Style="{StaticResource IconButton}"
                                     Content="&#xE706;" ToolTip="Toggle light / dark mode"
                                     Click="ThemeToggleButton_Click"/>
                             <Button x:Name="MenuButton" Style="{StaticResource IconButton}"
                                     Content="&#xE700;" ToolTip="Menu"
-                                    Click="MenuButton_Click"/>
+                                    Click="MenuButton_Click">
+                                <Button.RenderTransform><TranslateTransform Y="-2"/></Button.RenderTransform>
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -161,8 +166,23 @@
         <!-- ============================================================ -->
         <!-- RIGHT EDITOR PANE                                             -->
         <!-- ============================================================ -->
-        <Border Grid.Column="2" Background="{DynamicResource PanelBgBrush}">
-            <Grid x:Name="EditorRoot" Margin="26,18,26,18">
+        <Border x:Name="MainPane" Grid.Column="2" Background="{DynamicResource PanelBgBrush}">
+          <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- group bookmark bar -->
+                <RowDefinition Height="*"/>     <!-- editor / combined view -->
+            </Grid.RowDefinitions>
+
+            <!-- Group bookmark bar (pinned tag groups: "Main Window (Top)") -->
+            <Border x:Name="GroupBar" Grid.Row="0" Visibility="Collapsed"
+                    Background="{DynamicResource SidebarBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Padding="20,8">
+                <WrapPanel x:Name="GroupBarPanel" Orientation="Horizontal"/>
+            </Border>
+
+            <Grid Grid.Row="1">
+              <Grid x:Name="EditorRoot" Margin="26,18,26,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>  <!-- title + actions -->
                     <RowDefinition Height="Auto"/>  <!-- tags -->
@@ -319,8 +339,10 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Rich text editor -->
-                <RichTextBox x:Name="Editor" Grid.Row="3"
+                <!-- Rich text editor (wrapped so changelog entries render in a distinct box) -->
+                <Border x:Name="EditorBox" Grid.Row="3" Background="Transparent"
+                        BorderBrush="Transparent" BorderThickness="0" CornerRadius="0" Padding="0">
+                <RichTextBox x:Name="Editor"
                              Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource TextPrimaryBrush}"
                              CaretBrush="{DynamicResource TextPrimaryBrush}"
@@ -340,7 +362,47 @@
                         </Style>
                     </RichTextBox.Resources>
                 </RichTextBox>
+                </Border>
+              </Grid>
+
+              <!-- Combined notes view (opened from a group bookmark tag) -->
+              <Grid x:Name="CombinedView" Margin="26,18,26,18" Visibility="Collapsed">
+                  <Grid.RowDefinitions>
+                      <RowDefinition Height="Auto"/>
+                      <RowDefinition Height="*"/>
+                  </Grid.RowDefinitions>
+                  <TextBlock x:Name="CombinedTitle" Grid.Row="0"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             FontSize="24" FontWeight="Bold" Margin="0,0,0,12"/>
+                  <Border Grid.Row="1" Background="{DynamicResource FieldBrush}"
+                          BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                          CornerRadius="10" Padding="4">
+                      <ScrollViewer VerticalScrollBarVisibility="Auto">
+                          <ItemsControl x:Name="CombinedList">
+                              <ItemsControl.ItemTemplate>
+                                  <DataTemplate>
+                                      <Border Padding="16,13" Margin="4,3"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              BorderThickness="0,0,0,1">
+                                          <StackPanel>
+                                              <TextBlock Text="{Binding Title}"
+                                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                                         FontWeight="SemiBold" FontSize="16"
+                                                         TextTrimming="CharacterEllipsis"/>
+                                              <TextBlock Text="{Binding Body}"
+                                                         Foreground="{DynamicResource TextSecondaryBrush}"
+                                                         FontSize="13" Margin="0,5,0,0"
+                                                         TextWrapping="Wrap"/>
+                                          </StackPanel>
+                                      </Border>
+                                  </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                      </ScrollViewer>
+                  </Border>
+              </Grid>
             </Grid>
+          </Grid>
         </Border>
 
         <!-- ================= Formatting popup ================= -->
@@ -630,6 +692,14 @@
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
                 </Border.Effect>
                 <StackPanel>
+                    <Button x:Name="GroupLocationsMenuItem" Style="{StaticResource MenuRowButton}"
+                            Click="GroupLocationsMenu_Click" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="26" Text="&#xE718;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Group Locations" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource MenuRowButton}" Click="ChangelogMenu_Click">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Width="26" Text="&#xE81C;" FontFamily="Segoe MDL2 Assets"
@@ -637,6 +707,167 @@
                             <TextBlock Text="Changelog" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Manage Tags popup ================= -->
+        <Popup x:Name="ManageTagsPopup" PlacementTarget="{Binding ElementName=MainPane}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="440">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="Manage Tags" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ManageTagsList" MinHeight="30"/>
+                    </ScrollViewer>
+                    <Button Content="Done" HorizontalAlignment="Right" Margin="0,12,0,0"
+                            Style="{StaticResource LinkButton}" FontSize="13"
+                            Click="CloseManageTags_Click"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Rename tag popup ================= -->
+        <Popup x:Name="RenameTagPopup" PlacementTarget="{Binding ElementName=MainPane}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="320">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="RenameTagHeading" Text="Rename tag"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <Border Background="{DynamicResource FieldBrush}" CornerRadius="8"
+                            Padding="10,0" Height="36">
+                        <TextBox x:Name="RenameTagInput" VerticalAlignment="Center"
+                                 Style="{StaticResource PlaceholderTextBox}"
+                                 Tag="New tag name" KeyDown="RenameTagInput_KeyDown"/>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="RenameTagCancel_Click"/>
+                        <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
+                                Click="RenameTagSave_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Tag Groups popup ================= -->
+        <Popup x:Name="TagGroupsPopup" PlacementTarget="{Binding ElementName=MainPane}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="560">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="Tag Groups" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="Pick a group on the left, then check the tags that belong to it."
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                    <Grid Height="320" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="210"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <DockPanel Grid.Column="0">
+                            <Border DockPanel.Dock="Bottom" Background="{DynamicResource FieldBrush}"
+                                    CornerRadius="8" Padding="8,0" Height="34" Margin="0,8,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="NewGroupInput" Grid.Column="0" VerticalAlignment="Center"
+                                             Style="{StaticResource PlaceholderTextBox}"
+                                             Tag="New group name" KeyDown="NewGroupInput_KeyDown"/>
+                                    <Button Grid.Column="1" Content="&#xE710;" Style="{StaticResource IconButton}"
+                                            Width="26" Height="26" FontSize="12"
+                                            ToolTip="Add group" Click="AddGroup_Click"/>
+                                </Grid>
+                            </Border>
+                            <Border Background="{DynamicResource FieldBrush}" CornerRadius="8">
+                                <ListBox x:Name="GroupsListBox" Background="Transparent" BorderThickness="0"
+                                         ItemContainerStyle="{StaticResource PickerListBoxItem}"
+                                         SelectionChanged="GroupsListBox_SelectionChanged"/>
+                            </Border>
+                        </DockPanel>
+                        <Border Grid.Column="2" Background="{DynamicResource FieldBrush}" CornerRadius="8">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,8">
+                                <StackPanel x:Name="GroupTagsChecklist"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Button Content="Delete Group" HorizontalAlignment="Left"
+                                Style="{StaticResource LinkButton}" FontSize="13"
+                                Foreground="#E5484D" Click="TagGroupsDelete_Click"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Clear" Style="{StaticResource LinkButton}" FontSize="13"
+                                    Margin="0,0,16,0" Click="TagGroupsClear_Click"/>
+                            <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
+                                    Margin="0,0,16,0" Click="TagGroupsCancel_Click"/>
+                            <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
+                                    Click="TagGroupsSave_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Group Locations popup ================= -->
+        <Popup x:Name="GroupLocationsPopup" PlacementTarget="{Binding ElementName=MainPane}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="560">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="Group Locations" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="Pick a location on the left, then check the tag groups to show there."
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                    <Grid Height="300" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="210"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="{DynamicResource FieldBrush}" CornerRadius="8">
+                            <ListBox x:Name="LocationsListBox" Background="Transparent" BorderThickness="0"
+                                     ItemContainerStyle="{StaticResource PickerListBoxItem}"
+                                     SelectionChanged="LocationsListBox_SelectionChanged"/>
+                        </Border>
+                        <Border Grid.Column="2" Background="{DynamicResource FieldBrush}" CornerRadius="8">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,8">
+                                <StackPanel x:Name="LocationGroupsChecklist"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Content="Clear" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="GroupLocationsClear_Click"/>
+                        <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="GroupLocationsCancel_Click"/>
+                        <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
+                                Click="GroupLocationsSave_Click"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Popup>

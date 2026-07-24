@@ -11,6 +11,18 @@ You can instead name the version yourself with a `## vX.Y.Z — YYYY-MM-DD`
 heading. Newest version first.
 
 ## Unreleased
+- Added Tag Groups: organise tags into named groups (Manage Groups) and manage
+  tags themselves (Manage Tags) — rename, delete with double-confirm, and see how
+  many notes use each tag.
+- Added Group Locations: pin a tag group to a "Main Window (Top)" bar of quick
+  tag bookmarks; clicking one shows a combined heading + snippet view of every
+  note with that tag.
+- Changelog view now says "Changelog" in the sidebar, shows "Released" dates,
+  hides the new-note button, and renders entries in a distinct full-height box.
+- Added a Changelog entry to the tag filter; picking a tag or All Notes now
+  leaves the changelog.
+- Moved the description placeholder to the top of its box, nudged the footer
+  buttons, and removed the stray boxes beside context-menu items.
 
 ## v1.1.7 — 2026-07-24
 - Added a menu (hamburger) button next to Check for Updates with a Changelog view.

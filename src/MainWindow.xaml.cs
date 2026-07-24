@@ -14,6 +14,13 @@ using System.Xml;
 
 namespace PurpleStarNotes;
 
+/// <summary>A note reduced to heading + snippet for the combined group view.</summary>
+public class CombinedCard
+{
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+}
+
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<Note> _notes = new();
@@ -24,7 +31,14 @@ public partial class MainWindow : Window
     private string _search = "";
     private string _tagFilter = "";
     private bool _changelogMode;
+    private string _combinedTag = "";          // non-empty => main pane shows the combined view
     private readonly AppSettings _settings;
+
+    // Working copies used while the Tag Groups / Group Locations popups are open.
+    private List<TagGroup> _workingGroups = new();
+    private string? _workingGroupName;         // group currently selected in the popup
+    private List<string> _workingTopGroups = new();
+    private string _renamingTag = "";          // tag being renamed in the rename popup
 
     // Default font size for each paragraph category (overridable per note).
     private static readonly Dictionary<string, double> DefaultSizes = new()
@@ -49,6 +63,7 @@ public partial class MainWindow : Window
         VersionText.Text = "v" + Updater.CurrentVersion.ToString(3);
 
         LoadAllNotes();
+        UpdateGroupChrome();
 
         Closing += (_, _) => { PersistCurrent(); NoteStore.Save(_notes); };
     }
@@ -81,6 +96,7 @@ public partial class MainWindow : Window
     private void RefreshList()
     {
         UpdateTagButtonVisibility();
+        UpdateSidebarChrome();
 
         foreach (var n in _notes)
             n.VisibleTags = VisibleTagsFor(n);
@@ -120,8 +136,29 @@ public partial class MainWindow : Window
         if (NotesList.SelectedItem is not Note note || note == _current)
             return;
 
+        // Selecting a note leaves the combined group view and shows the editor.
+        if (_combinedTag.Length > 0)
+        {
+            _combinedTag = "";
+            ShowCombinedView(false);
+        }
+
         PersistCurrent();
         LoadNoteIntoEditor(note);
+    }
+
+    // Toggle the main pane between the editor and the combined group view.
+    private void ShowCombinedView(bool on)
+    {
+        CombinedView.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        EditorRoot.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    // Sidebar title + the "+" button depend on whether the changelog is showing.
+    private void UpdateSidebarChrome()
+    {
+        SidebarTitle.Text = _changelogMode ? "Changelog" : "Notes";
+        AddButton.Visibility = _changelogMode ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void LoadNoteIntoEditor(Note note)
@@ -160,6 +197,27 @@ public partial class MainWindow : Window
         TitleBox.IsReadOnly = cl;
         TagsRow.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
         FormatToolbar.Visibility = cl ? Visibility.Collapsed : Visibility.Visible;
+
+        // Changelog content sits inside a distinct, full-height box separated from
+        // the top bar; a normal note's editor stays borderless.
+        if (cl)
+        {
+            EditorBox.Background = (Brush)FindResource("FieldBrush");
+            EditorBox.BorderBrush = (Brush)FindResource("BorderBrush");
+            EditorBox.BorderThickness = new Thickness(1);
+            EditorBox.CornerRadius = new CornerRadius(10);
+            EditorBox.Padding = new Thickness(18, 14, 18, 14);
+            EditorBox.Margin = new Thickness(0, 6, 0, 0);
+        }
+        else
+        {
+            EditorBox.Background = Brushes.Transparent;
+            EditorBox.BorderBrush = Brushes.Transparent;
+            EditorBox.BorderThickness = new Thickness(0);
+            EditorBox.CornerRadius = new CornerRadius(0);
+            EditorBox.Padding = new Thickness(0);
+            EditorBox.Margin = new Thickness(0);
+        }
     }
 
     private void TitleBox_TextChanged(object sender, TextChangedEventArgs e) => ScheduleSave();
@@ -212,6 +270,9 @@ public partial class MainWindow : Window
         var note = new Note { Title = "" };
         _notes.Add(note);
         _changelogMode = false;   // leave the changelog when creating a note
+        _combinedTag = "";
+        _tagFilter = "";
+        ShowCombinedView(false);
         _search = "";
         SearchBox.Text = "";
         RefreshList();
@@ -327,15 +388,67 @@ public partial class MainWindow : Window
     private void BuildTagFilterMenu()
     {
         TagFilterPanel.Children.Clear();
+
+        // All notes.
         TagFilterPanel.Children.Add(MakeFilterRow("All notes", "", string.IsNullOrEmpty(_tagFilter)));
-        foreach (var t in AllTags())
+
+        var allTags = AllTags().ToList();
+        var grouped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Tag groups (above the normal tags, each under its own header).
+        foreach (var g in GroupsSorted())
+        {
+            var members = g.Tags
+                .Where(t => allTags.Any(a => a.Equals(t, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (members.Count == 0)
+                continue;
+            TagFilterPanel.Children.Add(MakeGroupHeaderRow(g.Name));
+            foreach (var t in members)
+            {
+                grouped.Add(t);
+                TagFilterPanel.Children.Add(MakeFilterRow(
+                    t, t, t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase), indent: 12));
+            }
+        }
+
+        // Ungrouped tags.
+        var ungrouped = allTags.Where(t => !grouped.Contains(t)).ToList();
+        if (ungrouped.Count > 0 && grouped.Count > 0)
+            TagFilterPanel.Children.Add(MakeSeparator());
+        foreach (var t in ungrouped)
             TagFilterPanel.Children.Add(
                 MakeFilterRow(t, t, t.Equals(_tagFilter, StringComparison.OrdinalIgnoreCase)));
+
+        // Changelog (visually separated at the bottom of the tag list).
+        TagFilterPanel.Children.Add(MakeSeparator());
+        TagFilterPanel.Children.Add(MakeActionRow("Changelog", "\uE81C", (_, _) =>
+        {
+            TagFilterPopup.IsOpen = false;
+            EnterChangelog();
+        }));
+
+        // Tag/group management actions.
+        TagFilterPanel.Children.Add(MakeSeparator());
+        TagFilterPanel.Children.Add(MakeActionRow("Manage Tags", "\uE8EC", (_, _) =>
+        {
+            TagFilterPopup.IsOpen = false;
+            OpenManageTags();
+        }));
+        bool hasGroups = _settings.TagGroups.Count > 0;
+        TagFilterPanel.Children.Add(MakeActionRow(hasGroups ? "Manage Groups" : "Add Group", "\uE8B7", (_, _) =>
+        {
+            TagFilterPopup.IsOpen = false;
+            OpenTagGroups();
+        }));
     }
 
-    private Button MakeFilterRow(string label, string value, bool selected)
+    private Button MakeFilterRow(string label, string value, bool selected, double indent = 0)
     {
         var b = new Button { Style = (Style)FindResource("MenuRowButton"), Tag = value };
+        if (indent > 0)
+            b.Margin = new Thickness(indent, 0, 0, 0);
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         var icon = new TextBlock
         {
@@ -355,12 +468,71 @@ public partial class MainWindow : Window
         return b;
     }
 
+    // Non-clickable header row shown above a tag group's member tags.
+    private FrameworkElement MakeGroupHeaderRow(string name)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 7, 10, 2) };
+        var icon = new TextBlock
+        {
+            Text = "\uE8B7", FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 12, Width = 22, VerticalAlignment = VerticalAlignment.Center
+        };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var txt = new TextBlock
+        {
+            Text = name, FontWeight = FontWeights.SemiBold, FontSize = 11.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        txt.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+        sp.Children.Add(icon);
+        sp.Children.Add(txt);
+        return sp;
+    }
+
+    private Border MakeSeparator()
+    {
+        var b = new Border { Height = 1, Margin = new Thickness(6, 5, 6, 5) };
+        b.SetResourceReference(Border.BackgroundProperty, "BorderBrush");
+        return b;
+    }
+
+    private Button MakeActionRow(string label, string glyph, RoutedEventHandler handler)
+    {
+        var b = new Button { Style = (Style)FindResource("MenuRowButton") };
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        var icon = new TextBlock
+        {
+            Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14, Width = 24, VerticalAlignment = VerticalAlignment.Center
+        };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+        var txt = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        sp.Children.Add(icon);
+        sp.Children.Add(txt);
+        b.Content = sp;
+        b.Click += handler;
+        return b;
+    }
+
     private void TagFilter_Selected(object sender, RoutedEventArgs e)
     {
         _tagFilter = (string)((Button)sender).Tag;
+        // Selecting All notes or a tag leaves the changelog / combined view.
+        bool wasSpecial = _changelogMode || _combinedTag.Length > 0;
+        _changelogMode = false;
+        _combinedTag = "";
+        ShowCombinedView(false);
         TagFilterPopup.IsOpen = false;
         RefreshList();
+        if (wasSpecial || _current == null || !NotesList.Items.Contains(_current))
+        {
+            if (NotesList.Items.Count > 0)
+                NotesList.SelectedItem = NotesList.Items[0];
+        }
     }
+
+    private IEnumerable<TagGroup> GroupsSorted() =>
+        _settings.TagGroups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase);
 
     // ============================================================
     // Hamburger menu / changelog
@@ -379,6 +551,8 @@ public partial class MainWindow : Window
     {
         PersistCurrent();
         _changelogMode = true;
+        _combinedTag = "";
+        ShowCombinedView(false);
         _tagFilter = "";
         _search = "";
         SearchBox.Text = "";
@@ -403,6 +577,538 @@ public partial class MainWindow : Window
                                  .FirstOrDefault();
         if (firstRegular != null)
             NotesList.SelectedItem = firstRegular;
+    }
+
+    // ============================================================
+    // Group bookmark bar + combined group view
+    // ============================================================
+
+    private void UpdateGroupChrome()
+    {
+        GroupLocationsMenuItem.Visibility =
+            _settings.TagGroups.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RefreshGroupBar();
+    }
+
+    // Build the "Main Window (Top)" bookmark bar from the pinned tag groups.
+    private void RefreshGroupBar()
+    {
+        GroupBarPanel.Children.Clear();
+        var pinned = _settings.MainWindowTopGroups
+            .Select(name => _settings.TagGroups.FirstOrDefault(
+                g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .Where(g => g != null && g.Tags.Count > 0)
+            .Cast<TagGroup>()
+            .ToList();
+
+        if (pinned.Count == 0)
+        {
+            GroupBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        foreach (var g in pinned)
+        {
+            var section = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 18, 3) };
+            var label = new TextBlock
+            {
+                Text = g.Name, FontWeight = FontWeights.SemiBold, FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0)
+            };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+            section.Children.Add(label);
+            foreach (var tag in g.Tags.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+                section.Children.Add(MakeBookmarkButton(tag));
+            GroupBarPanel.Children.Add(section);
+        }
+        GroupBar.Visibility = Visibility.Visible;
+    }
+
+    private Button MakeBookmarkButton(string tag)
+    {
+        var b = new Button
+        {
+            Tag = tag, Margin = new Thickness(0, 0, 6, 0),
+            Style = (Style)FindResource("BookmarkButton")
+        };
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        var icon = new TextBlock
+        {
+            Text = "", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0)
+        };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        var txt = new TextBlock { Text = tag, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        txt.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+        sp.Children.Add(icon);
+        sp.Children.Add(txt);
+        b.Content = sp;
+        b.Click += (_, _) => EnterCombined(tag);
+        return b;
+    }
+
+    // Show the combined heading+snippet view for all notes carrying a tag.
+    private void EnterCombined(string tag)
+    {
+        PersistCurrent();
+        _changelogMode = false;
+        _combinedTag = tag;
+        _tagFilter = tag;
+        _search = "";
+        SearchBox.Text = "";
+        _current = null;            // stop RefreshList reselecting into the editor
+        RefreshList();
+        NotesList.SelectedItem = null;
+
+        CombinedTitle.Text = tag;
+        var cards = _notes
+            .Where(n => !n.IsChangelog &&
+                        n.Tags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(n => n.Modified)
+            .Select(n => new CombinedCard { Title = n.DisplayTitle, Body = CombinedBody(n) })
+            .ToList();
+        CombinedList.ItemsSource = cards;
+        ShowCombinedView(true);
+    }
+
+    // Combined-card snippet: Description, else custom snippet, else first 20 words.
+    private static string CombinedBody(Note n)
+    {
+        if (!string.IsNullOrWhiteSpace(n.Description))
+            return n.Description.Trim();
+        if (!string.IsNullOrWhiteSpace(n.CustomSnippet))
+            return n.CustomSnippet.Trim();
+        return FirstWords(n.Preview, 20);
+    }
+
+    private static string FirstWords(string text, int count)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "";
+        var words = text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return words.Length <= count
+            ? string.Join(' ', words)
+            : string.Join(' ', words.Take(count)) + "…";
+    }
+
+    // ============================================================
+    // Manage Tags
+    // ============================================================
+
+    private int NoteCountForTag(string tag) =>
+        _notes.Count(n => !n.IsChangelog &&
+                          n.Tags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase)));
+
+    private void OpenManageTags()
+    {
+        BuildManageTagsList();
+        ManageTagsPopup.IsOpen = true;
+    }
+
+    private void CloseManageTags_Click(object sender, RoutedEventArgs e) => ManageTagsPopup.IsOpen = false;
+
+    private void BuildManageTagsList()
+    {
+        ManageTagsList.Children.Clear();
+        var tags = AllTags().ToList();
+        if (tags.Count == 0)
+        {
+            var empty = new TextBlock { Text = "No tags yet.", Margin = new Thickness(4, 6, 4, 6) };
+            empty.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+            ManageTagsList.Children.Add(empty);
+            return;
+        }
+        foreach (var tag in tags)
+            ManageTagsList.Children.Add(MakeManageTagRow(tag));
+    }
+
+    private FrameworkElement MakeManageTagRow(string tag)
+    {
+        var grid = new Grid { Margin = new Thickness(2, 2, 2, 2) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var name = new TextBlock
+        {
+            Text = tag, VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13
+        };
+        name.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+        Grid.SetColumn(name, 0);
+
+        int count = NoteCountForTag(tag);
+        var countText = new TextBlock
+        {
+            Text = count + (count == 1 ? " note" : " notes"),
+            VerticalAlignment = VerticalAlignment.Center, FontSize = 12,
+            Margin = new Thickness(8, 0, 8, 0)
+        };
+        countText.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+        Grid.SetColumn(countText, 1);
+
+        var rename = new Button
+        {
+            Content = "", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
+            Style = (Style)FindResource("IconButton"), Width = 30, Height = 30,
+            ToolTip = "Rename tag", Tag = tag
+        };
+        rename.Click += (s, _) => OpenRenameTag((string)((Button)s).Tag);
+        Grid.SetColumn(rename, 2);
+
+        var del = new Button
+        {
+            Content = "", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
+            Style = (Style)FindResource("IconButton"), Width = 30, Height = 30,
+            ToolTip = "Delete tag", Tag = tag
+        };
+        del.Click += (s, _) => DeleteTag((string)((Button)s).Tag);
+        Grid.SetColumn(del, 3);
+
+        grid.Children.Add(name);
+        grid.Children.Add(countText);
+        grid.Children.Add(rename);
+        grid.Children.Add(del);
+        return grid;
+    }
+
+    private void DeleteTag(string tag)
+    {
+        int count = NoteCountForTag(tag);
+        var first = MessageBox.Show(this,
+            $"Delete the tag \"{tag}\"? It will be removed from {count} note{(count == 1 ? "" : "s")}.",
+            "Delete tag", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (first != MessageBoxResult.OK)
+            return;
+        var second = MessageBox.Show(this,
+            $"Are you sure? This permanently removes \"{tag}\" and cannot be undone.",
+            "Delete tag", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (second != MessageBoxResult.OK)
+            return;
+
+        RemoveTagEverywhere(tag);
+        BuildManageTagsList();
+    }
+
+    // Remove a tag from every note and every group, and clear it from filters.
+    private void RemoveTagEverywhere(string tag)
+    {
+        foreach (var n in _notes)
+            n.Tags.RemoveAll(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        foreach (var g in _settings.TagGroups)
+            g.Tags.RemoveAll(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase));
+
+        if (_tagFilter.Equals(tag, StringComparison.OrdinalIgnoreCase))
+            _tagFilter = "";
+        if (_combinedTag.Equals(tag, StringComparison.OrdinalIgnoreCase))
+        {
+            _combinedTag = "";
+            ShowCombinedView(false);
+        }
+        SyncCurrentTagsFromNote();
+
+        _settings.Save();
+        NoteStore.Save(_notes);
+        UpdateGroupChrome();
+        RefreshList();
+    }
+
+    private void OpenRenameTag(string tag)
+    {
+        _renamingTag = tag;
+        RenameTagHeading.Text = $"Rename \"{tag}\"";
+        RenameTagInput.Text = tag;
+        RenameTagPopup.IsOpen = true;
+        RenameTagInput.Focus();
+        RenameTagInput.SelectAll();
+    }
+
+    private void RenameTagInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) CommitRenameTag();
+        else if (e.Key == Key.Escape) RenameTagPopup.IsOpen = false;
+    }
+
+    private void RenameTagSave_Click(object sender, RoutedEventArgs e) => CommitRenameTag();
+    private void RenameTagCancel_Click(object sender, RoutedEventArgs e) => RenameTagPopup.IsOpen = false;
+
+    private void CommitRenameTag()
+    {
+        string oldTag = _renamingTag;
+        string newTag = RenameTagInput.Text.Trim().Trim('/');
+        if (!string.IsNullOrEmpty(newTag) && !string.IsNullOrEmpty(oldTag) &&
+            !newTag.Equals(oldTag, StringComparison.OrdinalIgnoreCase))
+            RenameTagEverywhere(oldTag, newTag);
+        RenameTagPopup.IsOpen = false;
+        BuildManageTagsList();
+    }
+
+    private void RenameTagEverywhere(string oldTag, string newTag)
+    {
+        foreach (var n in _notes)
+        {
+            for (int i = 0; i < n.Tags.Count; i++)
+                if (n.Tags[i].Equals(oldTag, StringComparison.OrdinalIgnoreCase))
+                    n.Tags[i] = newTag;
+            n.Tags = DedupeTags(n.Tags);
+        }
+        foreach (var g in _settings.TagGroups)
+        {
+            for (int i = 0; i < g.Tags.Count; i++)
+                if (g.Tags[i].Equals(oldTag, StringComparison.OrdinalIgnoreCase))
+                    g.Tags[i] = newTag;
+            g.Tags = DedupeTags(g.Tags);
+        }
+        if (_tagFilter.Equals(oldTag, StringComparison.OrdinalIgnoreCase)) _tagFilter = newTag;
+        if (_combinedTag.Equals(oldTag, StringComparison.OrdinalIgnoreCase)) _combinedTag = newTag;
+        SyncCurrentTagsFromNote();
+
+        _settings.Save();
+        NoteStore.Save(_notes);
+        UpdateGroupChrome();
+        RefreshList();
+    }
+
+    private void SyncCurrentTagsFromNote()
+    {
+        if (_current == null) return;
+        _currentTags.Clear();
+        foreach (var t in _current.Tags)
+            if (!t.Equals(Note.ChangelogTag, StringComparison.OrdinalIgnoreCase))
+                _currentTags.Add(t);
+    }
+
+    private static List<string> DedupeTags(List<string> tags)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
+        foreach (var t in tags)
+            if (seen.Add(t))
+                result.Add(t);
+        return result;
+    }
+
+    // ============================================================
+    // Tag Groups popup
+    // ============================================================
+
+    private void OpenTagGroups()
+    {
+        // Edit a copy; commit only on Save.
+        _workingGroups = _settings.TagGroups
+            .Select(g => new TagGroup { Name = g.Name, Tags = new List<string>(g.Tags) })
+            .ToList();
+        _workingGroupName = _workingGroups
+            .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault()?.Name;
+        NewGroupInput.Text = "";
+        RebuildGroupsListBox();
+        BuildGroupTagsChecklist();
+        TagGroupsPopup.IsOpen = true;
+    }
+
+    private void RebuildGroupsListBox()
+    {
+        GroupsListBox.SelectionChanged -= GroupsListBox_SelectionChanged;
+        GroupsListBox.Items.Clear();
+        foreach (var g in _workingGroups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase))
+            GroupsListBox.Items.Add(g.Name);
+        GroupsListBox.SelectionChanged += GroupsListBox_SelectionChanged;
+        if (_workingGroupName != null)
+            GroupsListBox.SelectedItem = _workingGroupName;
+    }
+
+    private void GroupsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _workingGroupName = GroupsListBox.SelectedItem as string;
+        BuildGroupTagsChecklist();
+    }
+
+    private void NewGroupInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) AddWorkingGroup();
+    }
+
+    private void AddGroup_Click(object sender, RoutedEventArgs e) => AddWorkingGroup();
+
+    private void AddWorkingGroup()
+    {
+        string name = NewGroupInput.Text.Trim();
+        NewGroupInput.Text = "";
+        if (string.IsNullOrEmpty(name) ||
+            _workingGroups.Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            return;
+        _workingGroups.Add(new TagGroup { Name = name });
+        _workingGroupName = name;
+        RebuildGroupsListBox();
+        BuildGroupTagsChecklist();
+    }
+
+    private TagGroup? CurrentWorkingGroup() =>
+        _workingGroups.FirstOrDefault(g =>
+            g.Name.Equals(_workingGroupName, StringComparison.OrdinalIgnoreCase));
+
+    private void BuildGroupTagsChecklist()
+    {
+        GroupTagsChecklist.Children.Clear();
+        var group = CurrentWorkingGroup();
+        if (group == null)
+        {
+            AddChecklistHint("Add or pick a group first.");
+            return;
+        }
+        var tags = AllTags().ToList();
+        if (tags.Count == 0)
+        {
+            AddChecklistHint("No tags yet.");
+            return;
+        }
+        foreach (var tag in tags)
+        {
+            var cb = new CheckBox
+            {
+                Content = tag, Margin = new Thickness(2, 5, 2, 5), FontSize = 13, Tag = tag,
+                IsChecked = group.Tags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase))
+            };
+            cb.SetResourceReference(CheckBox.ForegroundProperty, "TextPrimaryBrush");
+            cb.Checked += GroupTag_Toggled;
+            cb.Unchecked += GroupTag_Toggled;
+            GroupTagsChecklist.Children.Add(cb);
+        }
+    }
+
+    private void AddChecklistHint(string text)
+    {
+        var hint = new TextBlock { Text = text, Margin = new Thickness(2, 6, 2, 6) };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+        GroupTagsChecklist.Children.Add(hint);
+    }
+
+    private void GroupTag_Toggled(object sender, RoutedEventArgs e)
+    {
+        var group = CurrentWorkingGroup();
+        if (group == null || sender is not CheckBox cb || cb.Tag is not string tag)
+            return;
+        group.Tags.RemoveAll(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        if (cb.IsChecked == true)
+            group.Tags.Add(tag);
+    }
+
+    private void TagGroupsClear_Click(object sender, RoutedEventArgs e)
+    {
+        var group = CurrentWorkingGroup();
+        if (group == null) return;
+        group.Tags.Clear();
+        BuildGroupTagsChecklist();
+    }
+
+    private void TagGroupsDelete_Click(object sender, RoutedEventArgs e)
+    {
+        var group = CurrentWorkingGroup();
+        if (group == null) return;
+        var confirm = MessageBox.Show(this,
+            $"Delete the group \"{group.Name}\"? (Tags themselves are not deleted.)",
+            "Delete group", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK) return;
+
+        _workingGroups.Remove(group);
+        _workingGroupName = _workingGroups
+            .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault()?.Name;
+        RebuildGroupsListBox();
+        BuildGroupTagsChecklist();
+    }
+
+    private void TagGroupsCancel_Click(object sender, RoutedEventArgs e) => TagGroupsPopup.IsOpen = false;
+
+    private void TagGroupsSave_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.TagGroups = _workingGroups
+            .Where(g => !string.IsNullOrWhiteSpace(g.Name))
+            .Select(g => new TagGroup { Name = g.Name.Trim(), Tags = DedupeTags(g.Tags) })
+            .ToList();
+        // Forget pinned locations whose group no longer exists.
+        _settings.MainWindowTopGroups = _settings.MainWindowTopGroups
+            .Where(name => _settings.TagGroups.Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        _settings.Save();
+        TagGroupsPopup.IsOpen = false;
+        UpdateGroupChrome();
+    }
+
+    // ============================================================
+    // Group Locations popup
+    // ============================================================
+
+    private const string MainTopLocation = "Main Window (Top)";
+
+    private void GroupLocationsMenu_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        OpenGroupLocations();
+    }
+
+    private void OpenGroupLocations()
+    {
+        if (_settings.TagGroups.Count == 0)
+            return;
+        _workingTopGroups = new List<string>(_settings.MainWindowTopGroups);
+
+        LocationsListBox.SelectionChanged -= LocationsListBox_SelectionChanged;
+        LocationsListBox.Items.Clear();
+        LocationsListBox.Items.Add(MainTopLocation);
+        LocationsListBox.SelectionChanged += LocationsListBox_SelectionChanged;
+        LocationsListBox.SelectedIndex = 0;
+
+        BuildLocationGroupsChecklist();
+        GroupLocationsPopup.IsOpen = true;
+    }
+
+    private void LocationsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => BuildLocationGroupsChecklist();
+
+    private void BuildLocationGroupsChecklist()
+    {
+        LocationGroupsChecklist.Children.Clear();
+        // Only one location exists for now (Main Window Top), so all groups map to it.
+        foreach (var g in GroupsSorted())
+        {
+            var cb = new CheckBox
+            {
+                Content = g.Name, Margin = new Thickness(2, 5, 2, 5), FontSize = 13, Tag = g.Name,
+                IsChecked = _workingTopGroups.Any(n => n.Equals(g.Name, StringComparison.OrdinalIgnoreCase))
+            };
+            cb.SetResourceReference(CheckBox.ForegroundProperty, "TextPrimaryBrush");
+            cb.Checked += LocationGroup_Toggled;
+            cb.Unchecked += LocationGroup_Toggled;
+            LocationGroupsChecklist.Children.Add(cb);
+        }
+    }
+
+    private void LocationGroup_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox cb || cb.Tag is not string name)
+            return;
+        _workingTopGroups.RemoveAll(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (cb.IsChecked == true)
+            _workingTopGroups.Add(name);
+    }
+
+    private void GroupLocationsClear_Click(object sender, RoutedEventArgs e)
+    {
+        _workingTopGroups.Clear();
+        BuildLocationGroupsChecklist();
+    }
+
+    private void GroupLocationsCancel_Click(object sender, RoutedEventArgs e) => GroupLocationsPopup.IsOpen = false;
+
+    private void GroupLocationsSave_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.MainWindowTopGroups = new List<string>(_workingTopGroups);
+        _settings.Save();
+        GroupLocationsPopup.IsOpen = false;
+        RefreshGroupBar();
     }
 
     // ============================================================
