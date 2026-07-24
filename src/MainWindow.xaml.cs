@@ -366,6 +366,7 @@ public partial class MainWindow : Window
     private void OpenSnippetPopup()
     {
         if (_current == null) return;
+        DescriptionInput.Text = _current.Description;
         SnippetInput.Text = _current.CustomSnippet;
         SnippetPopup.IsOpen = true;
     }
@@ -374,6 +375,7 @@ public partial class MainWindow : Window
     {
         if (_current != null)
         {
+            _current.Description = DescriptionInput.Text;
             _current.CustomSnippet = SnippetInput.Text.Trim();
             NoteStore.Save(_notes);
         }
@@ -382,9 +384,11 @@ public partial class MainWindow : Window
 
     private void SnippetClear_Click(object sender, RoutedEventArgs e)
     {
+        DescriptionInput.Text = "";
         SnippetInput.Text = "";
         if (_current != null)
         {
+            _current.Description = "";
             _current.CustomSnippet = "";
             NoteStore.Save(_notes);
         }
@@ -523,15 +527,26 @@ public partial class MainWindow : Window
     // Render the box glyphs from one symbol font with text (not emoji) presentation
     // so the empty and checked boxes are the same size.
     private static readonly FontFamily CheckFont = new FontFamily("Segoe UI Symbol");
-    private const double CheckGlyphSize = 26;   // ~2x the body text
+    // Checkbox size and line spacing follow the note's normal text size, not a
+    // fixed value, so lines stay tight and scale with the text.
+    private double CheckGlyphFontSize => SizeFor("Normal") * 1.6;
+    private double CheckLineHeight => SizeFor("Normal") * 1.75;
     private static string GlyphText(bool done) => (done ? BoxDone : BoxEmpty) + "︎ ";
-    private static Run NewGlyphRun(bool done) => new Run(GlyphText(done))
+    private Run NewGlyph(bool done) => new Run(GlyphText(done))
     {
         Foreground = new SolidColorBrush(AccentColor),
         FontFamily = CheckFont,
-        FontSize = CheckGlyphSize,
+        FontSize = CheckGlyphFontSize,
         BaselineAlignment = BaselineAlignment.Center
     };
+
+    // Make check paragraphs pack tightly based on text size (not the big box).
+    private void StyleCheckParagraph(Paragraph p)
+    {
+        p.LineHeight = CheckLineHeight;
+        p.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        p.Margin = new Thickness(0, 0, 0, 3);
+    }
 
     private static bool IsCheck(Paragraph p)
     {
@@ -550,7 +565,8 @@ public partial class MainWindow : Window
         if (IsCheck(p))
             return;
         p.Tag = CheckTag;
-        var glyph = NewGlyphRun(false);
+        StyleCheckParagraph(p);
+        var glyph = NewGlyph(false);
         if (p.Inlines.FirstInline != null)
             p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
         else
@@ -568,6 +584,10 @@ public partial class MainWindow : Window
             inl.TextDecorations = null;
             inl.ClearValue(TextElement.ForegroundProperty);
         }
+        // Revert the tight check-list line spacing.
+        p.ClearValue(Block.LineHeightProperty);
+        p.ClearValue(Block.LineStackingStrategyProperty);
+        p.ClearValue(Block.MarginProperty);
         p.Tag = "Normal";
     }
 
@@ -586,9 +606,16 @@ public partial class MainWindow : Window
         if (tp?.Paragraph is Paragraph p && IsCheck(p) &&
             p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
         {
-            Rect box = r.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-            if (pt.X >= box.Left - 2 && pt.X <= box.Right + 3 &&
-                pt.Y >= box.Top && pt.Y <= box.Bottom)
+            // GetCharacterRect returns a thin caret rect, so measure the box
+            // width from the caret before it and the caret just after it.
+            Rect a = r.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            var afterBox = r.ContentStart.GetPositionAtOffset(1, LogicalDirection.Forward);
+            Rect b = (afterBox ?? r.ContentEnd).GetCharacterRect(LogicalDirection.Backward);
+            double left = Math.Min(a.Left, b.Left);
+            double right = Math.Max(a.Left, b.Left);
+            double top = Math.Min(a.Top, b.Top);
+            double bottom = Math.Max(a.Bottom, b.Bottom);
+            if (pt.X >= left - 3 && pt.X <= right + 4 && pt.Y >= top && pt.Y <= bottom)
                 return p;
         }
         return null;
@@ -621,7 +648,7 @@ public partial class MainWindow : Window
         {
             glyph.Text = GlyphText(ns);
             glyph.FontFamily = CheckFont;
-            glyph.FontSize = CheckGlyphSize;
+            glyph.FontSize = CheckGlyphFontSize;
             glyph.BaselineAlignment = BaselineAlignment.Center;
         }
 
@@ -657,18 +684,19 @@ public partial class MainWindow : Window
             if (!IsCheck(p))
                 continue;
 
+            StyleCheckParagraph(p);
             bool done = (p.Tag as string) == CheckDoneTag;
             if (p.Inlines.FirstInline is Run r && LooksLikeBox(r.Text))
             {
                 r.Text = GlyphText(done);
                 r.Foreground = new SolidColorBrush(AccentColor);
                 r.FontFamily = CheckFont;
-                r.FontSize = CheckGlyphSize;
+                r.FontSize = CheckGlyphFontSize;
                 r.BaselineAlignment = BaselineAlignment.Center;
             }
             else
             {
-                var glyph = NewGlyphRun(done);
+                var glyph = NewGlyph(done);
                 if (p.Inlines.FirstInline != null)
                     p.Inlines.InsertBefore(p.Inlines.FirstInline, glyph);
                 else

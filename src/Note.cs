@@ -40,6 +40,9 @@ public class Note : INotifyPropertyChanged
         set { _customSnippet = value; OnPropertyChanged(); OnPropertyChanged(nameof(Snippet)); }
     }
 
+    /// <summary>Longer per-note description. Stored for future use; not shown anywhere yet.</summary>
+    public string Description { get; set; } = "";
+
     public List<string> Tags { get; set; } = new();
 
     /// <summary>

@@ -79,7 +79,7 @@
                                 <StackPanel.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Add/Edit Tags" Click="CtxTags_Click"/>
-                                        <MenuItem Header="Add/Edit Snippet" Click="CtxSnippet_Click"/>
+                                        <MenuItem Header="Add/Edit Description" Click="CtxSnippet_Click"/>
                                         <MenuItem Header="Delete Note" Click="CtxDelete_Click"/>
                                     </ContextMenu>
                                 </StackPanel.ContextMenu>
@@ -108,7 +108,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.4"
+                        <TextBlock x:Name="VersionText" Grid.Column="0" Text="v1.1.5"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="11.5" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -154,7 +154,7 @@
                              TextChanged="TitleBox_TextChanged"/>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="SnippetButton" Style="{StaticResource IconButton}"
-                                Content="&#xE70B;" ToolTip="Add/edit snippet"
+                                Content="&#xE70B;" ToolTip="Add/edit description"
                                 Click="SnippetButton_Click"/>
                         <Button x:Name="DeleteButton" Style="{StaticResource IconButton}"
                                 Content="&#xE74D;" ToolTip="Delete note"
@@ -530,20 +530,35 @@
                     <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
                 </Border.Effect>
                 <StackPanel>
-                    <TextBlock Text="Snippet" Foreground="{DynamicResource TextPrimaryBrush}"
+                    <!-- Description (longer; stored on the note, not shown yet) -->
+                    <TextBlock Text="Description" Foreground="{DynamicResource TextPrimaryBrush}"
                                FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="Shown in the note list instead of the note text."
+                    <TextBlock Text="Saved with the note."
                                Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="12" Margin="0,3,0,10" TextWrapping="Wrap"/>
+                               FontSize="12" Margin="0,3,0,8" TextWrapping="Wrap"/>
                     <Border Background="{DynamicResource FieldBrush}" CornerRadius="8" Padding="10,8">
-                        <TextBox x:Name="SnippetInput"
+                        <TextBox x:Name="DescriptionInput"
                                  Style="{StaticResource PlaceholderTextBox}"
-                                 Tag="Type a short snippet..."
+                                 Tag="Add a description..."
                                  AcceptsReturn="True" TextWrapping="Wrap"
-                                 Height="90" VerticalContentAlignment="Top"
+                                 Height="100" VerticalContentAlignment="Top"
                                  VerticalScrollBarVisibility="Auto"/>
                     </Border>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+
+                    <!-- Snippet (one line; shown in the sidebar) -->
+                    <TextBlock Text="Snippet" Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="14" FontWeight="SemiBold" Margin="0,14,0,0"/>
+                    <TextBlock Text="Shown in the note list instead of the note text."
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,3,0,8" TextWrapping="Wrap"/>
+                    <Border Background="{DynamicResource FieldBrush}" CornerRadius="8"
+                            Padding="10,0" Height="36">
+                        <TextBox x:Name="SnippetInput" VerticalAlignment="Center"
+                                 Style="{StaticResource PlaceholderTextBox}"
+                                 Tag="One-line snippet..."/>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                         <Button Content="Clear" Style="{StaticResource LinkButton}" FontSize="13"
                                 Margin="0,0,16,0" Click="SnippetClear_Click"/>
                         <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
