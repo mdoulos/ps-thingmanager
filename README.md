@@ -108,32 +108,41 @@ desktop shortcuts, and registers an entry in **Settings → Apps**.
 
 ## Updates: going from the repository to an installed update
 
-Updates flow through **GitHub Releases**:
+Updates flow through **GitHub Releases**, and releasing is automatic:
 
 ```
-  edit code -> bump version -> push a tag (vX.Y.Z) -> GitHub Action builds the
-  installer and publishes a Release -> the app's "Check for updates" button
-  installs it
+  add notes under "## Unreleased" in CHANGELOG.md -> merge a PR to main ->
+  the "Release on merge" Action bumps the version, builds the installer, and
+  publishes a Release -> the app's "Check for Updates" button installs it
 ```
 
 ### Publishing an update (you, the developer)
 
+You don't bump the version or push tags by hand — merging to `main` does it:
+
 1. Make your changes.
-2. Bump the version in **`src/PurpleStarNotes.csproj`** (`<Version>1.2.0</Version>`).
-3. Commit and push.
-4. Create and push a matching tag:
+2. Add a `-` bullet (or a few) describing them under `## Unreleased` in
+   **`CHANGELOG.md`**.
+3. Open a PR and merge it to **`main`**.
 
-   ```powershell
-   git tag v1.2.0
-   git push origin v1.2.0
-   ```
+On merge, the **Release on merge** workflow (`.github/workflows/release.yml`):
 
-   (Or, from the repo's **Actions** tab, run **Build and Release** and type the
-   version — handy if tag pushes are blocked in your environment.)
+- computes the next version — a **patch** bump of the latest tag by default, or
+  a **minor**/**major** bump if the merge commit message contains `#minor` /
+  `#major`;
+- stamps that version + today's date into `CHANGELOG.md` and the app version
+  (csproj, footer label, installer) and commits it back to `main`;
+- builds the self-contained app + `PurpleStarNotesSetup.exe` and publishes a
+  GitHub Release named `vX.Y.Z` with the installer attached.
 
-5. The **Build and Release** workflow compiles a self-contained build, builds
-   `PurpleStarNotesSetup.exe`, and publishes a GitHub Release named `v1.2.0`
-   with the installer attached.
+If `## Unreleased` is empty, the run is a no-op. To pin an exact version instead
+of the auto bump, name it yourself with a `## vX.Y.Z — YYYY-MM-DD` heading at the
+top of `CHANGELOG.md`, or run the workflow manually from the **Actions** tab and
+type a version.
+
+> **Note:** releases fire on pushes to **`main`**, where the version tags live,
+> so PRs should target `main` (make it the repository's default branch if it
+> isn't already).
 
 ### Updating from inside the app (your users)
 
@@ -181,7 +190,7 @@ src/
 installer/
   PurpleStarNotes.iss     Inno Setup script -> PurpleStarNotesSetup.exe
 .github/workflows/
-  release.yml             Builds the installer + publishes a Release on a tag
+  release.yml             Auto-bumps the version + publishes a Release on merge to main
 ```
 
 ## Troubleshooting

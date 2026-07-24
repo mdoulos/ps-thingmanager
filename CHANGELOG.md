@@ -1,9 +1,16 @@
 # Changelog
 
 All notable changes to Purple Star Notes. The app reads this file to build the
-in-app changelog (Menu → Changelog), so each release should add a new `##`
-section here. Format: `## <version> — <yyyy-MM-dd>` followed by `-` bullet lines,
-newest version first.
+in-app changelog (Menu → Changelog).
+
+**Adding changes:** put your notes as `-` bullets under `## Unreleased` below.
+When your PR merges to `main`, CI stamps them with the next version and date,
+updates the app version, and publishes a release automatically — a patch bump
+by default, or add `#minor` / `#major` to the merge commit for a larger bump.
+You can instead name the version yourself with a `## vX.Y.Z — YYYY-MM-DD`
+heading. Newest version first.
+
+## Unreleased
 
 ## v1.1.7 — 2026-07-24
 - Added a menu (hamburger) button next to Check for Updates with a Changelog view.
