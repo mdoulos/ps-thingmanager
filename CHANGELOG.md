@@ -22,6 +22,8 @@ heading. Newest version first.
 - The tag menu now grows to fit its contents and only scrolls when it would be
   taller than the window.
 - Removed the leftover white boxes beside right-click menu items.
+
+## v1.1.8 — 2026-07-24
 - Added Tag Groups: organise tags into named groups (Manage Groups) and manage
   tags themselves (Manage Tags) — rename, delete with double-confirm, and see how
   many notes use each tag.
