@@ -109,9 +109,10 @@
                                             <Border Background="{DynamicResource FieldBrush}"
                                                     CornerRadius="5" Padding="6,2" Margin="0,7,5,0">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="&#xE8EC;" FontFamily="Segoe MDL2 Assets"
+                                                    <TextBlock Text="{Binding Converter={StaticResource TagIcon}}"
+                                                               FontFamily="Segoe MDL2 Assets"
                                                                FontSize="10"
-                                                               Foreground="{DynamicResource AccentBrush}"
+                                                               Foreground="{Binding Converter={StaticResource TagColor}}"
                                                                VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                     <TextBlock Text="{Binding}"
                                                                Foreground="{DynamicResource TextSecondaryBrush}"
@@ -178,7 +179,7 @@
                     Background="{DynamicResource SidebarBgBrush}"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                     Padding="20,8">
-                <WrapPanel x:Name="GroupBarPanel" Orientation="Horizontal"/>
+                <StackPanel x:Name="GroupBarPanel"/>
             </Border>
 
             <Grid Grid.Row="1">
@@ -228,8 +229,9 @@
                                     <Border Background="{DynamicResource FieldBrush}"
                                             CornerRadius="6" Padding="8,3" Margin="0,0,6,0">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#x2756;" FontSize="10"
-                                                       Foreground="{DynamicResource AccentBrush}"
+                                            <TextBlock Text="{Binding Converter={StaticResource TagIcon}}"
+                                                       FontFamily="Segoe MDL2 Assets" FontSize="10"
+                                                       Foreground="{Binding Converter={StaticResource TagColor}}"
                                                        VerticalAlignment="Center" Margin="0,0,5,0"/>
                                             <TextBlock Text="{Binding}"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"
@@ -388,7 +390,9 @@
                                               <TextBlock Text="{Binding Title}"
                                                          Foreground="{DynamicResource TextPrimaryBrush}"
                                                          FontWeight="SemiBold" FontSize="16"
-                                                         TextTrimming="CharacterEllipsis"/>
+                                                         TextTrimming="CharacterEllipsis"
+                                                         Cursor="Hand" ToolTip="Open note"
+                                                         MouseLeftButtonUp="CombinedCardOpen_Click"/>
                                               <TextBlock Text="{Binding Body}"
                                                          Foreground="{DynamicResource TextSecondaryBrush}"
                                                          FontSize="13" Margin="0,5,0,0"
@@ -671,11 +675,13 @@
                PopupAnimation="Fade" VerticalOffset="4">
             <Border Background="{DynamicResource MenuBgBrush}"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                    CornerRadius="8" Padding="5" MinWidth="200" MaxHeight="360">
+                    CornerRadius="8" Padding="5" MinWidth="200">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.4" Color="Black"/>
                 </Border.Effect>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <!-- Sizes to content; MaxHeight is set in code to the window height so it
+                     only scrolls when the tag list is taller than the window. -->
+                <ScrollViewer x:Name="TagFilterScroll" VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="TagFilterPanel"/>
                 </ScrollViewer>
             </Border>
@@ -743,16 +749,43 @@
                     <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
                 </Border.Effect>
                 <StackPanel>
-                    <TextBlock x:Name="RenameTagHeading" Text="Rename tag"
+                    <TextBlock x:Name="RenameTagHeading" Text="Edit Tag"
                                Foreground="{DynamicResource TextPrimaryBrush}"
-                               FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                               FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+                    <!-- Live preview -->
+                    <Border Background="{DynamicResource FieldBrush}" CornerRadius="6"
+                            Padding="8,4" Margin="0,4,0,10" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="EditTagPreviewIcon" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="EditTagPreviewName"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       FontSize="12.5" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Name" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,0,0,4"/>
                     <Border Background="{DynamicResource FieldBrush}" CornerRadius="8"
                             Padding="10,0" Height="36">
                         <TextBox x:Name="RenameTagInput" VerticalAlignment="Center"
                                  Style="{StaticResource PlaceholderTextBox}"
-                                 Tag="New tag name" KeyDown="RenameTagInput_KeyDown"/>
+                                 Tag="Tag name" KeyDown="RenameTagInput_KeyDown"
+                                 TextChanged="EditTagName_TextChanged"/>
                     </Border>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+
+                    <TextBlock Text="Color" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,12,0,4"/>
+                    <UniformGrid x:Name="EditTagColorGrid" Columns="9"/>
+                    <Button Content="Default color" Style="{StaticResource LinkButton}" FontSize="12"
+                            HorizontalAlignment="Left" Margin="0,4,0,0" Click="EditTagColorDefault_Click"/>
+
+                    <TextBlock Text="Icon" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,12,0,4"/>
+                    <WrapPanel x:Name="EditTagIconPanel"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                         <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
                                 Margin="0,0,16,0" Click="RenameTagCancel_Click"/>
                         <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
@@ -852,7 +885,25 @@
                         <Border Grid.Column="0" Background="{DynamicResource FieldBrush}" CornerRadius="8">
                             <ListBox x:Name="LocationsListBox" Background="Transparent" BorderThickness="0"
                                      ItemContainerStyle="{StaticResource PickerListBoxItem}"
-                                     SelectionChanged="LocationsListBox_SelectionChanged"/>
+                                     SelectionChanged="LocationsListBox_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding}"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <Button Grid.Column="1" Content="&#xE70F;"
+                                                    FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                    Style="{StaticResource IconButton}" Width="26" Height="26"
+                                                    ToolTip="Edit display options" Click="LocationEdit_Click"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </Border>
                         <Border Grid.Column="2" Background="{DynamicResource FieldBrush}" CornerRadius="8">
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,8">
@@ -867,6 +918,39 @@
                                 Margin="0,0,16,0" Click="GroupLocationsCancel_Click"/>
                         <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
                                 Click="GroupLocationsSave_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- ================= Group bar display options ================= -->
+        <Popup x:Name="GroupBarOptionsPopup" PlacementTarget="{Binding ElementName=MainPane}"
+               Placement="Center" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource MenuBgBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="16" Width="340">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="GroupBarOptionsHeading" Text="Main Window (Top)"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="16" FontWeight="SemiBold"/>
+                    <CheckBox x:Name="OptShowTagColors" Content="Show Tag Colors"
+                              Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,14,0,0"/>
+                    <CheckBox x:Name="OptShowGroupName" Content="Show Group Name"
+                              Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,10,0,0"/>
+                    <TextBlock Text="Presentation" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" Margin="0,16,0,4"/>
+                    <ComboBox x:Name="OptPresentation" Width="180" HorizontalAlignment="Left">
+                        <ComboBoxItem Content="Normal"/>
+                        <ComboBoxItem Content="Stretch"/>
+                    </ComboBox>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                        <Button Content="Cancel" Style="{StaticResource LinkButton}" FontSize="13"
+                                Margin="0,0,16,0" Click="GroupBarOptionsCancel_Click"/>
+                        <Button Content="Save" Style="{StaticResource LinkButton}" FontSize="13"
+                                Click="GroupBarOptionsSave_Click"/>
                     </StackPanel>
                 </StackPanel>
             </Border>

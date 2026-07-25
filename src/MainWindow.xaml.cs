@@ -19,6 +19,7 @@ public class CombinedCard
 {
     public string Title { get; set; } = "";
     public string Body { get; set; } = "";
+    public Note? Note { get; set; }
 }
 
 public partial class MainWindow : Window
@@ -38,7 +39,12 @@ public partial class MainWindow : Window
     private List<TagGroup> _workingGroups = new();
     private string? _workingGroupName;         // group currently selected in the popup
     private List<string> _workingTopGroups = new();
-    private string _renamingTag = "";          // tag being renamed in the rename popup
+    private string _renamingTag = "";          // tag being edited in the Edit Tag popup
+    private string? _editTagColor;             // pending color while the Edit Tag popup is open
+    private string? _editTagIcon;              // pending icon while the Edit Tag popup is open
+
+    /// <summary>Exposed so the tag icon/color converters can read tag styles.</summary>
+    internal static AppSettings? ActiveSettings;
 
     // Default font size for each paragraph category (overridable per note).
     private static readonly Dictionary<string, double> DefaultSizes = new()
@@ -52,6 +58,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _settings = AppSettings.Load();               // theme already applied in App.OnStartup
+        ActiveSettings = _settings;                   // let the tag converters read styles
         UpdateThemeGlyph();
 
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
@@ -64,6 +71,7 @@ public partial class MainWindow : Window
 
         LoadAllNotes();
         UpdateGroupChrome();
+        GroupBar.SizeChanged += GroupBar_SizeChanged;   // re-flow the Stretch layout on resize
 
         Closing += (_, _) => { PersistCurrent(); NoteStore.Save(_notes); };
     }
@@ -382,6 +390,8 @@ public partial class MainWindow : Window
     private void TagsHeaderButton_Click(object sender, RoutedEventArgs e)
     {
         BuildTagFilterMenu();
+        // Grow with content, but never taller than the window (then it scrolls).
+        TagFilterScroll.MaxHeight = Math.Max(200, ActualHeight - 120);
         TagFilterPopup.IsOpen = true;
     }
 
@@ -452,12 +462,19 @@ public partial class MainWindow : Window
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         var icon = new TextBlock
         {
-            Text = value == "" ? "\uE8FD" : "\uE8EC",   // all-notes (list) / tag glyph
             FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
             Width = 24, VerticalAlignment = VerticalAlignment.Center
         };
-        icon.SetResourceReference(TextBlock.ForegroundProperty,
-            value == "" ? "TextSecondaryBrush" : "AccentBrush");
+        if (value == "")
+        {
+            icon.Text = "\uE8FD";   // all-notes (list) glyph
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+        }
+        else
+        {
+            icon.Text = TagStyleLookup.IconFor(value);          // per-tag icon
+            icon.Foreground = TagStyleLookup.ColorBrushFor(value);
+        }
         var txt = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
         sp.Children.Add(icon);
         sp.Children.Add(txt);
@@ -591,53 +608,107 @@ public partial class MainWindow : Window
     }
 
     // Build the "Main Window (Top)" bookmark bar from the pinned tag groups.
-    private void RefreshGroupBar()
+    private bool _rebuildingBar;
+    private double _lastBarWidth = -1;
+
+    private void GroupBar_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        GroupBarPanel.Children.Clear();
-        var pinned = _settings.MainWindowTopGroups
-            .Select(name => _settings.TagGroups.FirstOrDefault(
-                g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-            .Where(g => g != null && g.Tags.Count > 0)
-            .Cast<TagGroup>()
-            .ToList();
-
-        if (pinned.Count == 0)
-        {
-            GroupBar.Visibility = Visibility.Collapsed;
+        // Only rebuild on a width change (Stretch depends on it); ignore the height
+        // changes our own rebuild causes so we do not loop.
+        if (Math.Abs(GroupBar.ActualWidth - _lastBarWidth) < 1)
             return;
-        }
-
-        foreach (var g in pinned)
-        {
-            var section = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 18, 3) };
-            var label = new TextBlock
-            {
-                Text = g.Name, FontWeight = FontWeights.SemiBold, FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0)
-            };
-            label.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
-            section.Children.Add(label);
-            foreach (var tag in g.Tags.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
-                section.Children.Add(MakeBookmarkButton(tag));
-            GroupBarPanel.Children.Add(section);
-        }
-        GroupBar.Visibility = Visibility.Visible;
+        _lastBarWidth = GroupBar.ActualWidth;
+        RefreshGroupBar();
     }
 
-    private Button MakeBookmarkButton(string tag)
+    // Build the "Main Window (Top)" bookmark bar from the pinned tag groups.
+    private void RefreshGroupBar()
+    {
+        if (_rebuildingBar)
+            return;
+        _rebuildingBar = true;
+        try
+        {
+            GroupBarPanel.Children.Clear();
+            var opts = _settings.MainWindowTopOptions;
+            var pinned = _settings.MainWindowTopGroups
+                .Select(name => _settings.TagGroups.FirstOrDefault(
+                    g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                .Where(g => g != null && g.Tags.Count > 0)
+                .Cast<TagGroup>()
+                .ToList();
+
+            if (pinned.Count == 0)
+            {
+                GroupBar.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            bool stretch = string.Equals(opts.Presentation, "Stretch", StringComparison.OrdinalIgnoreCase);
+            double avail = GroupBar.ActualWidth - 44;
+
+            foreach (var g in pinned)
+            {
+                var block = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
+                if (opts.ShowGroupName)
+                {
+                    var label = new TextBlock
+                    {
+                        Text = g.Name, FontWeight = FontWeights.SemiBold, FontSize = 12,
+                        Margin = new Thickness(0, 0, 0, 4)
+                    };
+                    label.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+                    block.Children.Add(label);
+                }
+
+                var tags = g.Tags.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+                if (stretch)
+                {
+                    int cols = avail > 0 ? Math.Max(1, Math.Min(tags.Count, (int)(avail / 130))) : 1;
+                    var ug = new System.Windows.Controls.Primitives.UniformGrid { Columns = cols };
+                    foreach (var tag in tags)
+                    {
+                        var b = MakeBookmarkButton(tag, opts.ShowTagColors);
+                        b.HorizontalAlignment = HorizontalAlignment.Stretch;
+                        b.HorizontalContentAlignment = HorizontalAlignment.Center;
+                        ug.Children.Add(b);
+                    }
+                    block.Children.Add(ug);
+                }
+                else
+                {
+                    var wp = new WrapPanel();
+                    foreach (var tag in tags)
+                        wp.Children.Add(MakeBookmarkButton(tag, opts.ShowTagColors));
+                    block.Children.Add(wp);
+                }
+                GroupBarPanel.Children.Add(block);
+            }
+            GroupBar.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            _rebuildingBar = false;
+        }
+    }
+
+    private Button MakeBookmarkButton(string tag, bool showColor)
     {
         var b = new Button
         {
-            Tag = tag, Margin = new Thickness(0, 0, 6, 0),
+            Tag = tag, Margin = new Thickness(0, 0, 6, 6),
             Style = (Style)FindResource("BookmarkButton")
         };
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         var icon = new TextBlock
         {
-            Text = "", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 10,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0)
+            Text = TagStyleLookup.IconFor(tag), FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0)
         };
-        icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        if (showColor)
+            icon.Foreground = TagStyleLookup.ColorBrushFor(tag);
+        else
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
         var txt = new TextBlock { Text = tag, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         txt.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
         sp.Children.Add(icon);
@@ -665,10 +736,17 @@ public partial class MainWindow : Window
             .Where(n => !n.IsChangelog &&
                         n.Tags.Any(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(n => n.Modified)
-            .Select(n => new CombinedCard { Title = n.DisplayTitle, Body = CombinedBody(n) })
+            .Select(n => new CombinedCard { Title = n.DisplayTitle, Body = CombinedBody(n), Note = n })
             .ToList();
         CombinedList.ItemsSource = cards;
         ShowCombinedView(true);
+    }
+
+    // Clicking a combined-card title opens that note in the editor.
+    private void CombinedCardOpen_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is CombinedCard card && card.Note != null)
+            NotesList.SelectedItem = card.Note;   // selection exits the combined view + loads the editor
     }
 
     // Combined-card snippet: Description, else custom snippet, else first 20 words.
@@ -750,11 +828,11 @@ public partial class MainWindow : Window
 
         var rename = new Button
         {
-            Content = "", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
+            Content = "\uE70F", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 13,
             Style = (Style)FindResource("IconButton"), Width = 30, Height = 30,
-            ToolTip = "Rename tag", Tag = tag
+            ToolTip = "Edit Tag", Tag = tag
         };
-        rename.Click += (s, _) => OpenRenameTag((string)((Button)s).Tag);
+        rename.Click += (s, _) => OpenEditTag((string)((Button)s).Tag);
         Grid.SetColumn(rename, 2);
 
         var del = new Button
@@ -798,6 +876,7 @@ public partial class MainWindow : Window
             n.Tags.RemoveAll(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase));
         foreach (var g in _settings.TagGroups)
             g.Tags.RemoveAll(t => t.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        _settings.TagStyles.RemoveAll(m => m.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase));
 
         if (_tagFilter.Equals(tag, StringComparison.OrdinalIgnoreCase))
             _tagFilter = "";
@@ -814,14 +893,106 @@ public partial class MainWindow : Window
         RefreshList();
     }
 
-    private void OpenRenameTag(string tag)
+    // Same swatch palette as the text-color popup.
+    private static readonly string[] TagColorSwatches =
+    {
+        "#000000", "#666666", "#999999", "#E5484D", "#EC7B2B", "#F5A524", "#EFC000", "#A0C93B", "#46A758",
+        "#12A594", "#0EA5C4", "#2F7FE0", "#4256D0", "#8E4EC6", "#D6489B", "#FFFFFF", "#CCCCCC", "#7C5CFF"
+    };
+    // A curated set of Segoe MDL2 glyphs offered as tag icons.
+    private static readonly string[] TagIconChoices =
+    {
+        "\uE734", "\uE1CF", "\uE73E", "\uE7C1", "\uE8F1", "\uE77B", "\uE716", "\uE7EE", "\uEB51", "\uE909", "\uE774", "\uE945", "\uE8A5", "\uE81C", "\uE897", "\uE72E", "\uE790", "\uEA80"
+    };
+
+    private void OpenEditTag(string tag)
     {
         _renamingTag = tag;
-        RenameTagHeading.Text = $"Rename \"{tag}\"";
+        var meta = TagStyleLookup.MetaFor(tag);
+        _editTagColor = meta?.Color;
+        _editTagIcon = meta?.Icon;
+
+        RenameTagHeading.Text = "Edit Tag";
         RenameTagInput.Text = tag;
+        BuildEditTagColorGrid();
+        BuildEditTagIconPanel();
+        UpdateEditTagPreview();
         RenameTagPopup.IsOpen = true;
         RenameTagInput.Focus();
         RenameTagInput.SelectAll();
+    }
+
+    private void BuildEditTagColorGrid()
+    {
+        EditTagColorGrid.Children.Clear();
+        foreach (var hex in TagColorSwatches)
+        {
+            var b = new Button
+            {
+                Style = (Style)FindResource("SwatchButton"), Tag = hex,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex))
+            };
+            b.Click += EditTagSwatch_Click;
+            EditTagColorGrid.Children.Add(b);
+        }
+    }
+
+    private void EditTagSwatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.Tag is string hex)
+        {
+            _editTagColor = hex;
+            UpdateEditTagPreview();
+        }
+    }
+
+    private void EditTagColorDefault_Click(object sender, RoutedEventArgs e)
+    {
+        _editTagColor = null;
+        UpdateEditTagPreview();
+    }
+
+    private void BuildEditTagIconPanel()
+    {
+        EditTagIconPanel.Children.Clear();
+        EditTagIconPanel.Children.Add(MakeIconChoice(null));       // Default (no override)
+        foreach (var glyph in TagIconChoices)
+            EditTagIconPanel.Children.Add(MakeIconChoice(glyph));
+    }
+
+    private Button MakeIconChoice(string? glyph)
+    {
+        var b = new Button
+        {
+            Width = 34, Height = 34, Margin = new Thickness(0, 0, 6, 6),
+            Style = (Style)FindResource("ToolButton"), Tag = glyph ?? "",
+            ToolTip = glyph == null ? "Default" : "Icon",
+            Content = new TextBlock
+            {
+                Text = glyph ?? "\uE894",   // "clear" glyph represents Default
+                FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 15
+            }
+        };
+        b.Click += (s, _) =>
+        {
+            string g = (string)((Button)s).Tag;
+            _editTagIcon = string.IsNullOrEmpty(g) ? null : g;
+            UpdateEditTagPreview();
+        };
+        return b;
+    }
+
+    private void EditTagName_TextChanged(object sender, TextChangedEventArgs e) => UpdateEditTagPreview();
+
+    private void UpdateEditTagPreview()
+    {
+        string name = RenameTagInput.Text.Trim();
+        EditTagPreviewName.Text = string.IsNullOrEmpty(name) ? "(tag)" : name;
+        EditTagPreviewIcon.Text = string.IsNullOrEmpty(_editTagIcon)
+            ? TagStyleLookup.DefaultIcon : _editTagIcon;
+        string hex = string.IsNullOrEmpty(_editTagColor) ? TagStyleLookup.AccentHex : _editTagColor;
+        try { EditTagPreviewIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); }
+        catch { /* ignore bad hex */ }
     }
 
     private void RenameTagInput_KeyDown(object sender, KeyEventArgs e)
@@ -837,11 +1008,41 @@ public partial class MainWindow : Window
     {
         string oldTag = _renamingTag;
         string newTag = RenameTagInput.Text.Trim().Trim('/');
-        if (!string.IsNullOrEmpty(newTag) && !string.IsNullOrEmpty(oldTag) &&
-            !newTag.Equals(oldTag, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(newTag))
+            newTag = oldTag;   // blank name keeps the old one
+
+        if (!string.IsNullOrEmpty(oldTag) && !newTag.Equals(oldTag, StringComparison.OrdinalIgnoreCase))
             RenameTagEverywhere(oldTag, newTag);
+
+        SetTagMeta(newTag, _editTagColor, _editTagIcon);
+        _settings.Save();
         RenameTagPopup.IsOpen = false;
+        RefreshAfterTagStyleChange();
         BuildManageTagsList();
+    }
+
+    private void SetTagMeta(string tag, string? color, string? icon)
+    {
+        _settings.TagStyles.RemoveAll(m => m.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(color) || !string.IsNullOrEmpty(icon))
+            _settings.TagStyles.Add(new TagMeta { Tag = tag, Color = color, Icon = icon });
+    }
+
+    // Re-render everywhere a tag icon/color appears after an edit.
+    private void RefreshAfterTagStyleChange()
+    {
+        NoteStore.Save(_notes);
+        UpdateGroupChrome();     // bookmark bar
+        RefreshList();           // sidebar chips
+        RebindEditorTags();      // editor chips
+    }
+
+    private void RebindEditorTags()
+    {
+        TagsList.ItemsSource = null;
+        TagsList.ItemsSource = _currentTags;
+        TagsPopupList.ItemsSource = null;
+        TagsPopupList.ItemsSource = _currentTags;
     }
 
     private void RenameTagEverywhere(string oldTag, string newTag)
@@ -860,6 +1061,9 @@ public partial class MainWindow : Window
                     g.Tags[i] = newTag;
             g.Tags = DedupeTags(g.Tags);
         }
+        foreach (var m in _settings.TagStyles)
+            if (m.Tag.Equals(oldTag, StringComparison.OrdinalIgnoreCase))
+                m.Tag = newTag;
         if (_tagFilter.Equals(oldTag, StringComparison.OrdinalIgnoreCase)) _tagFilter = newTag;
         if (_combinedTag.Equals(oldTag, StringComparison.OrdinalIgnoreCase)) _combinedTag = newTag;
         SyncCurrentTagsFromNote();
@@ -1108,6 +1312,33 @@ public partial class MainWindow : Window
         _settings.MainWindowTopGroups = new List<string>(_workingTopGroups);
         _settings.Save();
         GroupLocationsPopup.IsOpen = false;
+        RefreshGroupBar();
+    }
+
+    // ---- Per-location display options (Show colors / group name / presentation) ----
+
+    private void LocationEdit_Click(object sender, RoutedEventArgs e)
+    {
+        var opts = _settings.MainWindowTopOptions;
+        OptShowTagColors.IsChecked = opts.ShowTagColors;
+        OptShowGroupName.IsChecked = opts.ShowGroupName;
+        OptPresentation.SelectedIndex =
+            string.Equals(opts.Presentation, "Stretch", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        GroupBarOptionsPopup.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void GroupBarOptionsCancel_Click(object sender, RoutedEventArgs e)
+        => GroupBarOptionsPopup.IsOpen = false;
+
+    private void GroupBarOptionsSave_Click(object sender, RoutedEventArgs e)
+    {
+        var opts = _settings.MainWindowTopOptions;
+        opts.ShowTagColors = OptShowTagColors.IsChecked == true;
+        opts.ShowGroupName = OptShowGroupName.IsChecked == true;
+        opts.Presentation = OptPresentation.SelectedIndex == 1 ? "Stretch" : "Normal";
+        _settings.Save();
+        GroupBarOptionsPopup.IsOpen = false;
         RefreshGroupBar();
     }
 

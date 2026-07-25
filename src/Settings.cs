@@ -12,6 +12,22 @@ public class TagGroup
     public List<string> Tags { get; set; } = new();
 }
 
+/// <summary>Per-tag appearance: an optional color and icon glyph.</summary>
+public class TagMeta
+{
+    public string Tag { get; set; } = "";
+    public string? Color { get; set; }   // hex like "#E5484D"; null = default accent
+    public string? Icon { get; set; }     // Segoe MDL2 glyph; null = default tag glyph
+}
+
+/// <summary>Display options for a group-bookmark location (e.g. Main Window Top).</summary>
+public class GroupBarOptions
+{
+    public bool ShowTagColors { get; set; } = true;
+    public bool ShowGroupName { get; set; } = true;
+    public string Presentation { get; set; } = "Normal";   // "Normal" | "Stretch"
+}
+
 /// <summary>Small persisted app settings (theme, tag groups, group locations).</summary>
 public class AppSettings
 {
@@ -22,6 +38,12 @@ public class AppSettings
 
     /// <summary>Names of the tag groups pinned to the "Main Window (Top)" bar.</summary>
     public List<string> MainWindowTopGroups { get; set; } = new();
+
+    /// <summary>Per-tag color/icon overrides.</summary>
+    public List<TagMeta> TagStyles { get; set; } = new();
+
+    /// <summary>Display options for the Main Window (Top) bookmark bar.</summary>
+    public GroupBarOptions MainWindowTopOptions { get; set; } = new();
 
     private static string FilePath =>
         Path.Combine(NoteStore.Folder, "settings.json");
