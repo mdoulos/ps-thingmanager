@@ -11,6 +11,8 @@ You can instead name the version yourself with a `## vX.Y.Z — YYYY-MM-DD`
 heading. Newest version first.
 
 ## Unreleased
+
+## v1.1.9 — 2026-07-25
 - Tags can now have a custom color and icon: Manage Tags → Edit Tag (pencil)
   opens a name box, a color palette, and an icon picker; the chosen icon/color
   replace the default tag glyph everywhere the tag appears.
